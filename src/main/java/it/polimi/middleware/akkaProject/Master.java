@@ -17,8 +17,9 @@ public class Master
                 .parseFile(new File("conf/cluster.conf")) //
                 .withValue("akka.remote.classic.netty.tcp.port", ConfigValueFactory.fromAnyRef(1234)) //
                 .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("master")));
-        //final ActorSystem sys = ActorSystem.create("ClusterSystem", config);
-        System.out.println(config.getInt("akka.cluster.role.server.min-nr-of-members"));
+        final ActorSystem sys = ActorSystem.create("ClusterSystem", config);
+        sys.actorOf(MasterActor.props(), "master");
+        //System.out.println(config.getInt("akka.cluster.role.server.min-nr-of-members"));
 
 
     }

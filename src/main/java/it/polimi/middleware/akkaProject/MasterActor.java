@@ -56,15 +56,15 @@ public class MasterActor extends AbstractActor {
     }
 
     private void onMemberRemoved(MemberRemoved msg) {
+        //todo se i membri sono meno di R, shutdowna tutto
         log.info("Member is Removed: {}", msg.member());
     }
 
     private void onClusterState(ClusterEvent.CurrentClusterState msg) {
         for (final Member member : msg.getMembers()) {
             if (member.status().equals(MemberStatus.up())) {
-                if (member.hasRole("master")) {
-                    getContext().actorSelection(member.address() + "/user/master").tell("ciao", self());
-                }
+                //getContext().actorSelection(member.address() + "/user/master").tell("ciao", self());
+                System.out.println(member.address());
             }
         }
     }
