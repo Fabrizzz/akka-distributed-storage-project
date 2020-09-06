@@ -1,4 +1,4 @@
-package org.example;
+package it.polimi.middleware.akkaProject;
 
 import akka.actor.AbstractActor;
 import akka.event.Logging;
@@ -22,7 +22,7 @@ public class MyActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(myMessage.class, this::handleMessage)
-                .matchAny(m -> log.error("I just received {}", m))
+                .matchAny(m -> log.info("I just received {}", m))
                 .build();
     }
 

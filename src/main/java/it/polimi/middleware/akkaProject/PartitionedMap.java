@@ -1,4 +1,4 @@
-package org.example;
+package it.polimi.middleware.akkaProject;
 
 
 import java.util.ArrayList;
