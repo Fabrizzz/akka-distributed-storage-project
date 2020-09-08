@@ -1,6 +1,7 @@
-package it.polimi.middleware.akkaProject;
+package it.polimi.middleware.akkaProject.master;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.cluster.Cluster;
 import akka.cluster.ClusterEvent;
@@ -12,11 +13,73 @@ import akka.cluster.Member;
 import akka.cluster.MemberStatus;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import it.polimi.middleware.akkaProject.messages.InitialMembers;
 
-public class MasterActor extends AbstractActor {
+import java.util.ArrayList;
+
+public class ClusterListener extends AbstractActor {
     LoggingAdapter log = Logging.getLogger(getContext().system(), this);
     Cluster cluster = Cluster.get(getContext().system());
+    ActorRef master;
 
+    public ClusterListener(ActorRef master) {
+        this.master = master;
+    }
+
+    public static Props props(ActorRef master) {
+        return Props.create(ClusterListener.class, master);
+    }
+
+    @Override
+    public Receive createReceive() {
+        return receiveBuilder()//
+                .match(ClusterEvent.CurrentClusterState.class, this::onClusterState) //
+                .matchAny(o -> log.error("received unexpected message before initial configuration"))
+                .build();
+    }
+
+    private Receive defaultBehavior() {
+        return receiveBuilder()//
+                .match(MemberUp.class, this::onMemberUp) //
+                .match(UnreachableMember.class, this::onUnreachableMember) //
+                .match(MemberRemoved.class, this::onMemberRemoved) //
+                .match(MemberEvent.class, this::onMemberEvent) //
+                .build();
+    }
+
+    private void onMemberUp(MemberUp msg) {
+        log.info("Member is Up: {}", msg.member());
+		//todo manda nodo al master
+    }
+
+    private void onUnreachableMember(UnreachableMember msg) {
+
+        log.info("Member detected as unreachable: {}", msg.member());
+        cluster.down(msg.member().address());
+        //todo segnala nodo down al master, se i membri sono meno di R, shutdowna tutto
+    }
+
+    private void onMemberRemoved(MemberRemoved msg) {
+
+
+        log.info("Member is Removed: {}", msg.member());
+    }
+
+    private void onClusterState(ClusterEvent.CurrentClusterState msg) {
+        ArrayList<Member> initialMembers = new ArrayList<>();
+        for (final Member member : msg.getMembers()) {
+            if (member.status().equals(MemberStatus.up()) && (member.hasRole("server"))) {
+                initialMembers.add(member);
+            }
+        }
+        master.tell(new InitialMembers(initialMembers), getSelf());
+        System.out.println("INOLTRO AL MASTER I MEMBRI");
+        getContext().become(defaultBehavior());
+    }
+
+    private void onMemberEvent(MemberEvent msg) {
+        System.out.println("I just ignored " + msg.getClass().getCanonicalName());
+    }
 
     @Override
     public void preStart() {
@@ -25,55 +88,10 @@ public class MasterActor extends AbstractActor {
 
     }
 
-    // Re-subscribe when restart
+
     @Override
     public void postStop() {
-        cluster.unsubscribe(self());
-    }
+        getContext().system().terminate();
 
-    @Override
-    public Receive createReceive() {
-        return receiveBuilder()//
-                .match(MemberUp.class, this::onMemberUp) //
-                .match(UnreachableMember.class, this::onUnreachableMember) //
-                .match(MemberRemoved.class, this::onMemberRemoved) //
-                .match(ClusterEvent.CurrentClusterState.class, this::onClusterState) //
-                .match(MemberEvent.class, this::onMemberEvent) //
-                .build();
-    }
-
-    private void onMemberUp(MemberUp msg) {
-        log.info("Member is Up: {}", msg.member());
-		/*if (!msg.member().equals( cluster.selfMember()) )
-			cluster.down(msg.member().address());*/
-    }
-
-    private void onUnreachableMember(UnreachableMember msg) {
-        System.out.println("XXXXXXXXXXXXXXXXXXXXX");
-        System.out.println(msg.member().uniqueAddress());
-        log.info("Member detected as unreachable: {}", msg.member());
-        cluster.down(msg.member().address());
-    }
-
-    private void onMemberRemoved(MemberRemoved msg) {
-        //todo se i membri sono meno di R, shutdowna tutto
-        log.info("Member is Removed: {}", msg.member());
-    }
-
-    private void onClusterState(ClusterEvent.CurrentClusterState msg) {
-        for (final Member member : msg.getMembers()) {
-            if (member.status().equals(MemberStatus.up())) {
-                //getContext().actorSelection(member.address() + "/user/master").tell("ciao", self());
-                System.out.println(member.address());
-            }
-        }
-    }
-
-    private void onMemberEvent(MemberEvent msg) {
-        System.out.println("I just ignored " + msg.getClass().getCanonicalName());
-    }
-
-    public static Props props() {
-        return Props.create(MasterActor.class);
     }
 }

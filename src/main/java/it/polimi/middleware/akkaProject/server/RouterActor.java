@@ -1,4 +1,4 @@
-package it.polimi.middleware.akkaProject;
+package it.polimi.middleware.akkaProject.server;
 
 import akka.actor.AbstractActor;
 import akka.cluster.Cluster;
@@ -6,28 +6,47 @@ import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
 import akka.actor.Props;
+import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingInfo;
+import it.polimi.middleware.akkaProject.messages.GetData;
+import it.polimi.middleware.akkaProject.messages.InitialRoutingConfiguration;
+import it.polimi.middleware.akkaProject.messages.PutNewData;
 
 
+import java.util.List;
 import java.util.Optional;
 
 
-public class MyActor extends AbstractActor {
+public class RouterActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     Cluster cluster = Cluster.get(getContext().system());
+    List<PartitionRoutingInfo> partitionInfos;
 
     public static Props props() {
-        return Props.create(MyActor.class);
+        return Props.create(RouterActor.class);
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .matchEquals("exception", m -> {throw new Exception();})
-                .match(
-                        String.class,
-                        s -> log.info("Received String message: {}", s))
+                .match(InitialRoutingConfiguration.class, this::initialConfiguration)
+                .match(GetData.class, this::getData)
+                .match(PutNewData.class, this::putNewData)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+    public void getData(GetData message){
+
+    }
+
+    public void putNewData(PutNewData message){
+
+
+    }
+
+    public void initialConfiguration(InitialRoutingConfiguration message){
+        partitionInfos = message.getPartitionRoutingInfos();
+        //todo convertire addresses in actorRef
     }
 
 
@@ -40,8 +59,7 @@ public class MyActor extends AbstractActor {
     //non fa niente
     @Override
     public void postStop(){
-        cluster.leave(cluster.selfMember().address());
-        System.out.println("Sono morto: " + getContext().getSelf().path());
+        System.out.println("I just died: " + getContext().getSelf().path());
 
     }
 
