@@ -7,7 +7,7 @@ import akka.event.LoggingAdapter;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.Partition;
-import it.polimi.middleware.akkaProject.dataStructures.SavedData;
+import it.polimi.middleware.akkaProject.dataStructures.DataWithTimestamp;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -51,7 +51,7 @@ public class PartitionActor extends AbstractActor {
         log.info("Just received a get Request");
         boolean sentReply = false;
         if (partition.getMap().containsKey(message.getKey())) {
-            SavedData data = partition.getMap().get(message.getKey());
+            DataWithTimestamp data = partition.getMap().get(message.getKey());
             //todo testare sta roba
             if (data.getGeneratedAt().compareTo(message.getGeneratedAtLeastAt()) >= 0) {
                 sender().tell(new DataReply(partition.getMap().get(message.getKey())), self());
@@ -59,22 +59,22 @@ public class PartitionActor extends AbstractActor {
                 sentReply = true;
             }
         }
-
         if (!sentReply) {
             sender().tell(new DataNotFound(), self());
-            log.warning("Couldn't reply, data not found");
+            log.warning("Couldn't find data request");
         }
     }
 
     //PutUpdate received from the leader
     private void getPutUpdate(GetPutUpdate message){
         if (partition.getState() +1 == message.getState()){
-            log.info("Just received a put Update");
             partition.getMap().put(message.getMessage().getKey(), message.getMessage().getData());
             partition.incrementState();
             sender().tell(new PutUpdateReceived(), self());
+            log.info("Just accepted a put Update");
         }
-        log.warning("Couldn't elaborate put Update because wrong partition state");
+        else
+            log.warning("Couldn't elaborate put Update because wrong partition state");
         //todo mandare una risposta anche se rifiuto? dire perchè?
     }
 
@@ -92,7 +92,7 @@ public class PartitionActor extends AbstractActor {
         iAmLeader = true;
         otherReplicas = new ArrayList<>();
         for (Address otherReplica : message.getOtherReplicas()) {
-            Future<ActorRef> reply = getContext().actorSelection(otherReplica + "/user/supervisor/partition" + partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(3, TimeUnit.SECONDS)));
+            Future<ActorRef> reply = getContext().actorSelection(otherReplica + "/user/supervisor/partition" + partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
             try {
                 otherReplicas.add(Await.result(reply, scala.concurrent.duration.Duration.Inf()));
             } catch (Exception e) {
@@ -122,6 +122,7 @@ public class PartitionActor extends AbstractActor {
                 log.info("Just Accepted a Put Request");
                 partition.getMap().put(message.getKey(), message.getData());
                 partition.incrementState();
+                System.out.println("I am the leader, i accepted a Put and my state is now: " + partition.getState());
                 for (ActorRef otherReplica : otherReplicas) {
                     Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 1000);
                     try {

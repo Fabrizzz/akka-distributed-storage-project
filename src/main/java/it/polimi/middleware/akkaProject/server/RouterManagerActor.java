@@ -2,19 +2,28 @@ package it.polimi.middleware.akkaProject.server;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
+import akka.actor.Address;
 import akka.cluster.Cluster;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
 import akka.actor.Props;
+import akka.util.Timeout;
+import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingActorRefs;
+import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingAddresses;
 import it.polimi.middleware.akkaProject.messages.GetData;
-import it.polimi.middleware.akkaProject.messages.InitialRoutingConfiguration;
+import it.polimi.middleware.akkaProject.messages.RoutingActorRefInitialConfiguration;
+import it.polimi.middleware.akkaProject.messages.RoutingConfigurationMessage;
 import it.polimi.middleware.akkaProject.messages.PutNewData;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
 
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 
 public class RouterManagerActor extends AbstractActor {
@@ -36,11 +45,11 @@ public class RouterManagerActor extends AbstractActor {
 
     //todo in caso di Exception restartare?
 
-    //todo RoutingConfigurationUpdate
+    //todo RoutingConfigurationUpdate dal master
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(InitialRoutingConfiguration.class, this::initialConfiguration)
+                .match(RoutingConfigurationMessage.class, this::initialConfiguration)
                 .match(GetData.class, this::getData)
                 .match(PutNewData.class, this::putNewData)
                 .matchAny(o -> log.error("received unknown message"))
@@ -56,9 +65,37 @@ public class RouterManagerActor extends AbstractActor {
         routers.get(currentRouter++ % routers.size()).forward(message,getContext());
     }
 
-    public void initialConfiguration(InitialRoutingConfiguration message){
+    //todo forse era più semplice usare gli address e basta?
+    public void initialConfiguration(RoutingConfigurationMessage message){
+            ArrayList<PartitionRoutingActorRefs> newPartitionRoutingActorRefs = new ArrayList<>();
+            for (PartitionRoutingAddresses currentPartitionRoutingAddresses : message.getPartitionRoutingInfos()) {
+                int partitionId = currentPartitionRoutingAddresses.getPartitionId();
+                PartitionRoutingActorRefs currentPartitionRoutingActorRefs = new PartitionRoutingActorRefs(partitionId);
+                Future<ActorRef> reply = getContext().actorSelection(currentPartitionRoutingAddresses.getLeader() + "/user/supervisor/partition"+ partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                try {
+                    currentPartitionRoutingActorRefs.setLeader( Await.result(reply, Duration.Inf()));
+                    currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
+                } catch (Exception e) {
+                    log.error("Couldn't contact the leader of replica: " + currentPartitionRoutingAddresses.getPartitionId());
+                }
+                for (Address currentPartitionRoutingAddress : currentPartitionRoutingAddresses.getReplicas()) {
+                    if (!currentPartitionRoutingAddress.equals(currentPartitionRoutingAddresses.getLeader())) {
+                        reply = getContext().actorSelection(currentPartitionRoutingAddress + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                        try {
+                            currentPartitionRoutingActorRefs.getReplicas().add(Await.result(reply, Duration.Inf()));
+                        } catch (Exception e) {
+                            log.error("Couldn't contact a replica");
+                        }
+                    }
+                }
+                newPartitionRoutingActorRefs.add(currentPartitionRoutingActorRefs);
+            }
+
+            log.info("Finished obtaing all the Replicas ActorRef");
+
+
         for (ActorRef router : routers) {
-            router.tell(message, self());
+            router.tell(new RoutingActorRefInitialConfiguration(newPartitionRoutingActorRefs), self());
         }
     }
 

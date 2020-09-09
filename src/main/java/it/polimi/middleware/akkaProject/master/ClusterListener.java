@@ -17,6 +17,7 @@ import it.polimi.middleware.akkaProject.messages.InitialMembers;
 
 import java.util.ArrayList;
 
+/** This class Listen to Cluster events and communicate them to the master */
 public class ClusterListener extends AbstractActor {
     LoggingAdapter log = Logging.getLogger(getContext().system(), this);
     Cluster cluster = Cluster.get(getContext().system());
@@ -61,7 +62,7 @@ public class ClusterListener extends AbstractActor {
 
     private void onMemberRemoved(MemberRemoved msg) {
 
-
+        //todo segnala nodo al master
         log.info("Member is Removed: {}", msg.member());
     }
 
@@ -90,6 +91,8 @@ public class ClusterListener extends AbstractActor {
 
     @Override
     public void postStop() {
+        cluster.state().getMembers().forEach(m -> {if (!m.equals(cluster.selfMember())) cluster.leave(m.address()
+        );});
         getContext().system().terminate();
 
     }

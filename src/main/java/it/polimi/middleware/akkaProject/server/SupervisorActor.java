@@ -38,6 +38,7 @@ public class SupervisorActor extends AbstractActor {
     }
 
     private void becomeLeader(BecomeLeader message){
+        //todo risposta nel caso non esista la partizione?
         if (localPartitions[message.getPartitionId()] != null)
             localPartitions[message.getPartitionId()].forward(message, getContext());
     }

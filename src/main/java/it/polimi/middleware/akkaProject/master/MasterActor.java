@@ -6,13 +6,14 @@ import akka.actor.Address;
 import akka.actor.Props;
 import akka.cluster.Cluster;
 import akka.cluster.Member;
+import akka.cluster.MemberStatus;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.MemberInfos;
 import it.polimi.middleware.akkaProject.dataStructures.Partition;
-import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingInfo;
+import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingAddresses;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -23,12 +24,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+
 
 public class MasterActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     Cluster cluster = Cluster.get(getContext().system());
-    List<PartitionRoutingInfo> partitionRoutingInfos; //per ogni partizione mi dice quali server la hanno e chi è il leader
+    List<PartitionRoutingAddresses> partitionRoutingAddresses; //per ogni partizione mi dice quali server la hanno e chi è il leader
     TreeSet<MemberInfos> memberInfos;
 
 
@@ -38,7 +39,7 @@ public class MasterActor extends AbstractActor {
     public MasterActor(int numberOfPartitions, int numberOfReplicas) {
         this.numberOfPartitions = numberOfPartitions;
         this.numberOfReplicas = numberOfReplicas;
-        partitionRoutingInfos = new ArrayList<>(numberOfPartitions);
+        partitionRoutingAddresses = new ArrayList<>(numberOfPartitions);
 
     }
 
@@ -51,17 +52,18 @@ public class MasterActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(InitialMembers.class, this::onInitialMembers)
-                .match(UpdateRoutersList.class, this::updateRoutersList)
+                .match(UpdateMemberListRequest.class, this::updateMembersListRequest)
                 .matchAny(o -> log.error("received unexpected message before initial configuration"))
                 .build();
     }
 
-    private void updateRoutersList(UpdateRoutersList message){
+    private void updateMembersListRequest(UpdateMemberListRequest message){
         ArrayList<Address> list = new ArrayList<>();
         for (Member member : cluster.state().getMembers()) {
-            list.add(member.address());
+            if (member.status().equals(MemberStatus.up()) && member.hasRole("server"))
+                list.add(member.address());
         }
-        sender().tell(list, self());
+        sender().tell(new UpdateMemberListAnswer(list), self());
     }
 
     //initial set up
@@ -83,24 +85,23 @@ public class MasterActor extends AbstractActor {
             //todo ask per allocate Local Partition, altrimenti il successivo becomeLeader potrebbe fallire
             int currentMember = 0;
             for (int partitionId = 0; partitionId < numberOfPartitions; partitionId++) {
-                partitionRoutingInfos.add(new PartitionRoutingInfo(partitionId, members.get(currentMember % members.size()).address())); //create partitionRoutingInfo and set the leader
+                partitionRoutingAddresses.add(new PartitionRoutingAddresses(partitionId, members.get(currentMember % members.size()).address())); //create partitionRoutingInfo and set the leader
                 for (int j = 0; j < numberOfReplicas; j++) {
-                    partitionRoutingInfos.get(partitionId).getReplicas().add(members.get(currentMember % members.size()).address());
+                    partitionRoutingAddresses.get(partitionId).getReplicas().add(members.get(currentMember % members.size()).address());
                     if (j == 0)
-                        memberInfos.get(currentMember % members.size()).getPartitions().add(new MemberInfos.PartitionInfo(partitionId, true));
+                        memberInfos.get(currentMember % members.size()).getPartitionInfos().add(new MemberInfos.PartitionInfo(partitionId, true));
                     else
-                        memberInfos.get(currentMember % members.size()).getPartitions().add(new MemberInfos.PartitionInfo(partitionId, false));
+                        memberInfos.get(currentMember % members.size()).getPartitionInfos().add(new MemberInfos.PartitionInfo(partitionId, false));
                     Future<ActorRef> reply = getContext().actorSelection(members.get(currentMember % members.size()).address() + "/user/supervisor").resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
-                    ActorRef supervisor;
                     try {
-                        supervisor = Await.result(reply, Duration.Inf());
-                        memberInfos.get(currentMember % members.size()).setSupervisor(supervisor);
+                        ActorRef supervisor = Await.result(reply, Duration.Inf());
+                        memberInfos.get(currentMember % members.size()).setSupervisorReference(supervisor);
 
                         Future<Object> secondReply = Patterns.ask(supervisor, new AllocateLocalPartition(new Partition(partitionId)), 1000);
                         Await.result(secondReply, Duration.Inf());
 
                     }catch (Exception e) {
-                        log.error("Couldn't retrieve the ActorRef of a Partition", e);
+                        log.error("Couldn't allocate Partition: " + partitionId + " on: " + memberInfos.get(currentMember % members.size()).getMember().address(), e);
                         getContext().system().terminate();
                     }
                     currentMember++;
@@ -108,34 +109,32 @@ public class MasterActor extends AbstractActor {
             }
 
             this.memberInfos = new TreeSet<>(memberInfos);
-            InitialRoutingConfiguration configuration = new InitialRoutingConfiguration(partitionRoutingInfos);
 
             for (MemberInfos memberInfo : memberInfos) {
-                for (MemberInfos.PartitionInfo partition : memberInfo.getPartitions()) {
+                for (MemberInfos.PartitionInfo partition : memberInfo.getPartitionInfos()) {
                     if (partition.iAmLeader()){
                         ArrayList<Address> otherReplicas = new ArrayList<>();
-                        for (Address replica : partitionRoutingInfos.get(partition.getPartitionId()).getReplicas()) {
+                        for (Address replica : partitionRoutingAddresses.get(partition.getPartitionId()).getReplicas()) {
                             if (!memberInfo.getMember().address().equals(replica))
                                 otherReplicas.add(replica);
                         }
-                        Future<ActorRef> reply = getContext().actorSelection(memberInfo.getMember().address() + "/user/supervisor/partition"+partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
-                        ActorRef partitionRef = null;
                         try {
-                            partitionRef = Await.result(reply, Duration.Inf());
-                            Future<Object> secondReply = Patterns.ask(partitionRef, (new BecomeLeader(partition.getPartitionId(),otherReplicas)), 1000);
-                            if(Await.result(secondReply, Duration.Inf()) instanceof UnableToContactReplicas){
-                                log.error("Unable to elect a leader");
+                            Future<Object> reply = Patterns.ask(memberInfo.getSupervisorReference(), (new BecomeLeader(partition.getPartitionId(),otherReplicas)), 1000);
+                            if(Await.result(reply, Duration.Inf()) instanceof UnableToContactReplicas){
+                                log.error("Unable to elect a leader, because the leader couldn't contact other replicas");
                                 getContext().system().terminate();
                             }
 
                         } catch (Exception e) {
-                            log.error("Couldn't elect Leader");
+                            log.error("Couldn't elect Leader, because he doesn't answer in time");
                             getContext().system().terminate();
 
                         }
 
                     }
                 }
+
+                RoutingConfigurationMessage configuration = new RoutingConfigurationMessage(partitionRoutingAddresses);
                 getContext().actorSelection(memberInfo.getMember().address() + "/user/routerManager").tell(configuration, self());
             }
 

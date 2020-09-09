@@ -3,10 +3,11 @@ package it.polimi.middleware.akkaProject.dataStructures;
 import java.io.Serializable;
 import java.util.HashMap;
 
+/** this class stores Datas and state of a Partittion*/
 public class Partition implements Serializable{
     private final int partitionId;
     private int state = 0;
-    private HashMap<Serializable, SavedData> map;
+    private HashMap<Serializable, DataWithTimestamp> map;
 
 
     public Partition(int partitionId) {
@@ -14,7 +15,7 @@ public class Partition implements Serializable{
         map = new HashMap<>();
     }
 
-    public Partition(int partitionId, HashMap<Serializable, SavedData> map) {
+    public Partition(int partitionId, HashMap<Serializable, DataWithTimestamp> map) {
         this.partitionId = partitionId;
         this.map = map;
     }
@@ -27,16 +28,12 @@ public class Partition implements Serializable{
         return state;
     }
 
-    public void setState(int state) {
-        this.state = state;
+    public HashMap<Serializable, DataWithTimestamp> getMap() {
+        return map;
     }
 
     public void incrementState(){
         state++;
-    }
-
-    public HashMap<Serializable, SavedData> getMap() {
-        return map;
     }
 
     public Partition getPartitionCopy(){

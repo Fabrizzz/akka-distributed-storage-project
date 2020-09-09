@@ -8,12 +8,14 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class RoutingActorRefs implements Serializable {
+/** This class stores the actorRef of all the Replicas of a Partition*/
+
+public class PartitionRoutingActorRefs implements Serializable {
     private final int partitionId;
     private List<ActorRef> replicas = new ArrayList<>(); //leader included
-    private ActorRef leader;
+    private ActorRef leader; //it can be null is the routerManager wasn't able to contact it
 
-    public RoutingActorRefs(int partitionId) {
+    public PartitionRoutingActorRefs(int partitionId) {
         this.partitionId = partitionId;
     }
 

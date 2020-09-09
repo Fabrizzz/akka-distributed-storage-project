@@ -3,14 +3,12 @@ package it.polimi.middleware.akkaProject.client;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Address;
-import akka.cluster.Cluster;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
 import akka.actor.Props;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
-import it.polimi.middleware.akkaProject.dataStructures.SavedData;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -18,20 +16,21 @@ import scala.concurrent.duration.Duration;
 
 
 import java.io.Serializable;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 
 public class ClientActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final String masterAddress;
-    private HashMap<Serializable, SavedData> map = new HashMap<>();
     private ActorRef master;
-    private ArrayList<ActorRef> routers = new ArrayList<>();
+
+    private HashMap<Serializable, ZonedDateTime> map = new HashMap<>();
+    private ArrayList<ActorRef> routerManagers = new ArrayList<>();
     Random random = new Random();
 
     public ClientActor(String masterAddress) {
@@ -45,64 +44,74 @@ public class ClientActor extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(UpdateRoutersList.class, this::updateRouters)
+                .match(UpdateMemberListRequest.class, this::updateRouters)
                 .match(PutNewData.class, this::putNewData)
                 .match(ForwardGetData.class, this::getData)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
     }
 
-    private void updateRouters(UpdateRoutersList message){
+    private void updateRouters(UpdateMemberListRequest message) {
         Future<Object> reply = Patterns.ask(master, message, 1000);
-        ArrayList<Address> addresses = null;
         try {
-            addresses = (ArrayList<Address>) Await.result(reply, Duration.Inf());
+            ArrayList<Address> addresses = ((UpdateMemberListAnswer) Await.result(reply, Duration.Inf())).getList();
+            for (Address address : addresses) {
+                Future<ActorRef> secondReply = getContext().actorSelection(address + "/user/routerManager").resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                try {
+                    routerManagers.add(Await.result(secondReply, Duration.Inf()));
+                } catch (Exception e) {
+                    System.out.println("Couldn't get a Router ref: "+ address);
+                }
+            }
         } catch (Exception e) {
             System.out.println("Couldn't contact the master");
-            return;
         }
-
-        for (Address address : addresses) {
-            Future<ActorRef> secondReply = getContext().actorSelection(address +  "/user/routerManager").resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
-            try {
-                routers.add(Await.result(secondReply, Duration.Inf()));
-            } catch (Exception e) {
-                System.out.println("Couldn't get a Router ref");
-            }
-        }
-
+        System.out.println("Finished retreiving all the member's actorRef");
     }
 
-    private void putNewData(PutNewData message){
-        int router = random.nextInt(routers.size());
-        Future<Object> reply = Patterns.ask(routers.get(router), message, 3000);
-        try {
-            Object secondReply = Await.result(reply, Duration.Inf());
-            if (secondReply instanceof NotALeader)
-                System.out.println("The router contacted someone who was not a leader");
-            else if (secondReply instanceof DataIsTooOld)
-                System.out.println("Timestamp was too old and ignored");
-            else if (secondReply instanceof PutCompleted)
-                System.out.println("Put Completed");
-        } catch (Exception e) {
-            System.out.println("Didn't receive any answer");
-        }
-    }
-
-    private void getData(ForwardGetData message){
-        if (!map.containsKey(message.getKey()))
-            System.out.println("Cannot get something i have never put");
+    private void putNewData(PutNewData message) {
+        if (routerManagers.isEmpty())
+            System.out.println("I don't know any router");
         else {
-            int router = random.nextInt(routers.size());
-            Future<Object> reply = Patterns.ask(routers.get(router), new GetData(message.getKey(), map.get(message.getKey()).getGeneratedAt()), 3000);
+            int router = random.nextInt(routerManagers.size());
+            Future<Object> reply = Patterns.ask(routerManagers.get(router), message, 3000);
             try {
-                DataReply secondReply = (DataReply) Await.result(reply, Duration.Inf());
-                System.out.println("I got: " + secondReply.getData().getData());
+                Object secondReply = Await.result(reply, Duration.Inf());
+                if (secondReply instanceof NotALeader)
+                    System.out.println("The router contacted someone who was not a leader");
+                else if (secondReply instanceof DataIsTooOld)
+                    System.out.println("Timestamp was too old and ignored");
+                else if (secondReply instanceof PutCompleted) {
+                    map.put(message.getKey(), message.getData().getGeneratedAt());
+                    System.out.println("Put Completed");
+                }
             } catch (Exception e) {
                 System.out.println("Didn't receive any answer");
             }
         }
+    }
 
+    private void getData(ForwardGetData message) {
+        if (routerManagers.isEmpty())
+            System.out.println("I don't know any router");
+        else {
+            if (!map.containsKey(message.getKey()))
+                System.out.println("Cannot get something i have never put");
+            else {
+                int router = random.nextInt(routerManagers.size());
+                Future<Object> reply = Patterns.ask(routerManagers.get(router), new GetData(message.getKey(), map.get(message.getKey())), 3000);
+                try {
+                    Object secondReply = Await.result(reply, Duration.Inf());
+                    if (secondReply instanceof DataReply)
+                        System.out.println("I got: " + ((DataReply) secondReply).getData().getData());
+                    else if (secondReply instanceof DataNotFound)
+                        log.error("Data not found, retry later");
+                } catch (Exception e) {
+                    System.out.println("Didn't receive any answer");
+                }
+            }
+
+        }
     }
 
     //non fa niente
@@ -113,7 +122,7 @@ public class ClientActor extends AbstractActor {
         try {
             master = Await.result(reply, Duration.Inf());
         } catch (Exception e) {
-            log.error("Couldn't contact the Master");
+            log.error("Couldn't contact the Master", e);
             getContext().system().terminate();
         }
     }

@@ -5,13 +5,13 @@ import akka.cluster.Member;
 
 import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
 
+/**this class stores the List of Partitions managed by the member
+ */
 public class MemberInfos implements Serializable, Comparable<MemberInfos> {
     private final Member member;
-    private ArrayList<PartitionInfo> partitions = new ArrayList<>();
-    private ActorRef supervisor;
+    private ArrayList<PartitionInfo> partitionInfos = new ArrayList<>();
+    private ActorRef supervisorReference;
 
     public MemberInfos(Member member) {
         this.member = member;
@@ -21,21 +21,22 @@ public class MemberInfos implements Serializable, Comparable<MemberInfos> {
         return member;
     }
 
-    public ArrayList<PartitionInfo> getPartitions() {
-        return partitions;
+    public ArrayList<PartitionInfo> getPartitionInfos() {
+        return partitionInfos;
     }
 
-    public ActorRef getSupervisor() {
-        return supervisor;
+    /** può ritornare null*/
+    public ActorRef getSupervisorReference() {
+        return supervisorReference;
     }
 
-    public void setSupervisor(ActorRef supervisor) {
-        this.supervisor = supervisor;
+    public void setSupervisorReference(ActorRef supervisorReference) {
+        this.supervisorReference = supervisorReference;
     }
 
     @Override
     public int compareTo(MemberInfos o) {
-        return this.partitions.size() - o.partitions.size();
+        return this.partitionInfos.size() - o.partitionInfos.size();
     }
 
     public static class PartitionInfo{
@@ -53,6 +54,14 @@ public class MemberInfos implements Serializable, Comparable<MemberInfos> {
 
         public boolean iAmLeader() {
             return iAmLeader;
+        }
+
+        public void setPartitionId(int partitionId) {
+            this.partitionId = partitionId;
+        }
+
+        public void setiAmLeader(boolean iAmLeader) {
+            this.iAmLeader = iAmLeader;
         }
     }
 
