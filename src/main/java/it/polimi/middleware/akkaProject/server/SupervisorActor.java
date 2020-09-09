@@ -8,6 +8,7 @@ import akka.event.LoggingAdapter;
 import akka.japi.pf.DeciderBuilder;
 import it.polimi.middleware.akkaProject.messages.AllocateLocalPartition;
 import it.polimi.middleware.akkaProject.messages.AllocationCompleted;
+import it.polimi.middleware.akkaProject.messages.BecomeLeader;
 import scala.concurrent.duration.Duration;
 
 
@@ -31,8 +32,14 @@ public class SupervisorActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(AllocateLocalPartition.class, this::allocateLocalPartition)
+                .match(BecomeLeader.class, this::becomeLeader)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+    private void becomeLeader(BecomeLeader message){
+        if (localPartitions[message.getPartitionId()] != null)
+            localPartitions[message.getPartitionId()].forward(message, getContext());
     }
 
     //todo casi particolari da gestire?

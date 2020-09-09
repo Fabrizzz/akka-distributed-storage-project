@@ -19,6 +19,7 @@ public class Master
                 .withValue("akka.remote.classic.netty.tcp.port", ConfigValueFactory.fromAnyRef(1234)) //
                 .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("master")))
                 .withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
+                //da cambiare con Ip pubblico del Master (o local in caso di Lan)
 
         System.out.println("This is the Ip of the master: " + Inet4Address.getLocalHost().getHostAddress());
 

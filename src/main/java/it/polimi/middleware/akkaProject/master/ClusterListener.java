@@ -73,7 +73,6 @@ public class ClusterListener extends AbstractActor {
             }
         }
         master.tell(new InitialMembers(initialMembers), getSelf());
-        System.out.println("INOLTRO AL MASTER I MEMBRI");
         getContext().become(defaultBehavior());
     }
 

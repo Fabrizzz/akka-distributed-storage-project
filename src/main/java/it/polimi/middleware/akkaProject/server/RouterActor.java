@@ -1,25 +1,34 @@
 package it.polimi.middleware.akkaProject.server;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
+import akka.actor.Address;
 import akka.cluster.Cluster;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
 import akka.actor.Props;
+import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingInfo;
+import it.polimi.middleware.akkaProject.dataStructures.RoutingActorRefs;
 import it.polimi.middleware.akkaProject.messages.GetData;
 import it.polimi.middleware.akkaProject.messages.InitialRoutingConfiguration;
 import it.polimi.middleware.akkaProject.messages.PutNewData;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
 
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 
 public class RouterActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     Cluster cluster = Cluster.get(getContext().system());
-    List<PartitionRoutingInfo> partitionInfos;
+    List<RoutingActorRefs> partitionInfos;
 
     public static Props props() {
         return Props.create(RouterActor.class);
@@ -45,8 +54,27 @@ public class RouterActor extends AbstractActor {
     }
 
     public void initialConfiguration(InitialRoutingConfiguration message){
-        partitionInfos = message.getPartitionRoutingInfos();
-        //todo convertire addresses in actorRef
+        partitionInfos = new ArrayList<>();
+        for (PartitionRoutingInfo partitionRoutingInfo : message.getPartitionRoutingInfos()) {
+            RoutingActorRefs currentPartition = new RoutingActorRefs(partitionRoutingInfo.getPartitionId());
+            Future<ActorRef> reply = getContext().actorSelection(partitionRoutingInfo.getLeader() + "/user/supervisor/partition"+partitionRoutingInfo.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+            try {
+                currentPartition.setLeader( Await.result(reply, Duration.Inf()));
+            } catch (Exception e) {
+                log.error("Couldn't contact a leader");
+            }
+            for (Address replica : partitionRoutingInfo.getReplicas()) {
+                reply = getContext().actorSelection(replica + "/user/supervisor/partition"+partitionRoutingInfo.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                try {
+                    currentPartition.getReplicas().add( Await.result(reply, Duration.Inf()));
+                } catch (Exception e) {
+                    log.error("Couldn't contact a replica");
+                }
+            }
+            //todo
+            //partitionInfos.add();
+        }
+
     }
 
 

@@ -87,20 +87,22 @@ public class PartitionActor extends AbstractActor {
     }
 
     //become leader request from the master, retrieving all the replica's actorRef
-    private void becomeLeader(BecomeLeader message) throws InterruptedException {
+    private void becomeLeader(BecomeLeader message){
         log.info("Master just made me the leader of Partition");
         iAmLeader = true;
         otherReplicas = new ArrayList<>();
         for (Address otherReplica : message.getOtherReplicas()) {
-            Future<ActorRef> reply = getContext().actorSelection(otherReplica + "/user/supervisor/partition" + partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(2, TimeUnit.SECONDS)));
+            Future<ActorRef> reply = getContext().actorSelection(otherReplica + "/user/supervisor/partition" + partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(3, TimeUnit.SECONDS)));
             try {
                 otherReplicas.add(Await.result(reply, scala.concurrent.duration.Duration.Inf()));
-            } catch (TimeoutException e) {
+            } catch (Exception e) {
                 log.error("Wasn't able to retrieve actorRef of " + otherReplica);
-                //todo devo comunicarlo al master, non posso diventare leader, rischio che ogni altra partizione sia offline, essendo l unico a effettuare put, alla mia morte i dati verrebbero persi
-
+                sender().tell(new UnableToContactReplicas(), self());
+                iAmLeader = false;
+                return;
             }
         }
+        sender().tell(new IAmLeader(), self());
         log.info("Just finished to retrieve actorRefs of other Replicas");
     }
 

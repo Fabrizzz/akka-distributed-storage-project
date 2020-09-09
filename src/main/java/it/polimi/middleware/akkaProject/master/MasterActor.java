@@ -13,10 +13,7 @@ import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.MemberInfos;
 import it.polimi.middleware.akkaProject.dataStructures.Partition;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingInfo;
-import it.polimi.middleware.akkaProject.messages.AllocateLocalPartition;
-import it.polimi.middleware.akkaProject.messages.BecomeLeader;
-import it.polimi.middleware.akkaProject.messages.InitialRoutingConfiguration;
-import it.polimi.middleware.akkaProject.messages.InitialMembers;
+import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -54,12 +51,21 @@ public class MasterActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(InitialMembers.class, this::onInitialMembers)
+                .match(UpdateRoutersList.class, this::updateRoutersList)
                 .matchAny(o -> log.error("received unexpected message before initial configuration"))
                 .build();
     }
 
+    private void updateRoutersList(UpdateRoutersList message){
+        ArrayList<Address> list = new ArrayList<>();
+        for (Member member : cluster.state().getMembers()) {
+            list.add(member.address());
+        }
+        sender().tell(list, self());
+    }
+
     //initial set up
-    private void onInitialMembers(InitialMembers initialMembers) throws TimeoutException, InterruptedException {
+    private void onInitialMembers(InitialMembers initialMembers){
         ArrayList<Member> members = initialMembers.getInitialMembers();
         ArrayList<MemberInfos> memberInfos = new ArrayList<>();
 
@@ -89,17 +95,13 @@ public class MasterActor extends AbstractActor {
                     try {
                         supervisor = Await.result(reply, Duration.Inf());
                         memberInfos.get(currentMember % members.size()).setSupervisor(supervisor);
-                    } catch (Exception e) {
-                        log.error("Couldn't retrieve the ActorRef of a Node", e);
-                        throw e;
-                    }
-                    Future<Object> secondReply = Patterns.ask(supervisor, new AllocateLocalPartition(new Partition(partitionId)), 1000);
-                    try {
+
+                        Future<Object> secondReply = Patterns.ask(supervisor, new AllocateLocalPartition(new Partition(partitionId)), 1000);
                         Await.result(secondReply, Duration.Inf());
 
-                    } catch (Exception e) {
+                    }catch (Exception e) {
                         log.error("Couldn't retrieve the ActorRef of a Partition", e);
-                        throw e;
+                        getContext().system().terminate();
                     }
                     currentMember++;
                 }
@@ -116,7 +118,22 @@ public class MasterActor extends AbstractActor {
                             if (!memberInfo.getMember().address().equals(replica))
                                 otherReplicas.add(replica);
                         }
-                        getContext().actorSelection(memberInfo.getMember().address() + "/user/supervisor/partition"+partition.getPartitionId()).tell(new BecomeLeader(otherReplicas), self());
+                        Future<ActorRef> reply = getContext().actorSelection(memberInfo.getMember().address() + "/user/supervisor/partition"+partition.getPartitionId()).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                        ActorRef partitionRef = null;
+                        try {
+                            partitionRef = Await.result(reply, Duration.Inf());
+                            Future<Object> secondReply = Patterns.ask(partitionRef, (new BecomeLeader(partition.getPartitionId(),otherReplicas)), 1000);
+                            if(Await.result(secondReply, Duration.Inf()) instanceof UnableToContactReplicas){
+                                log.error("Unable to elect a leader");
+                                getContext().system().terminate();
+                            }
+
+                        } catch (Exception e) {
+                            log.error("Couldn't elect Leader");
+                            getContext().system().terminate();
+
+                        }
+
                     }
                 }
                 getContext().actorSelection(memberInfo.getMember().address() + "/user/routerManager").tell(configuration, self());
