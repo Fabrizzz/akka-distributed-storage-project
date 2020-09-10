@@ -9,6 +9,7 @@ import akka.japi.pf.DeciderBuilder;
 import it.polimi.middleware.akkaProject.messages.AllocateLocalPartition;
 import it.polimi.middleware.akkaProject.messages.AllocationCompleted;
 import it.polimi.middleware.akkaProject.messages.BecomeLeader;
+import it.polimi.middleware.akkaProject.messages.SnapshotReplicaRequest;
 import scala.concurrent.duration.Duration;
 
 
@@ -33,8 +34,17 @@ public class SupervisorActor extends AbstractActor {
         return receiveBuilder()
                 .match(AllocateLocalPartition.class, this::allocateLocalPartition)
                 .match(BecomeLeader.class, this::becomeLeader)
+                .match(SnapshotReplicaRequest.class, this::snapshotReplicaRequest)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+
+
+    private void snapshotReplicaRequest(SnapshotReplicaRequest message){
+        ActorRef current = localPartitions[message.getPartitionId()];
+        if (current != null)
+            current.forward(message, getContext());
     }
 
     private void becomeLeader(BecomeLeader message){
@@ -57,7 +67,7 @@ public class SupervisorActor extends AbstractActor {
     //todo cosa fare in caso di Exception? termina tutto -> escalate all for one strat
     private void allocateLocalPartition(AllocateLocalPartition message){
         int partitionId = message.getPartition().getPartitionId();
-        if (localPartitions[partitionId] == null || localPartitions[partitionId].isTerminated()) {
+        if (localPartitions[partitionId] == null) {
             localPartitions[partitionId] = getContext().actorOf(PartitionActor.props(), "partition"+partitionId);
             getContext().watch(localPartitions[partitionId]);
             //todo è necessario watchare?

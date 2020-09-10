@@ -39,11 +39,17 @@ public class PartitionActor extends AbstractActor {
                 .match(AllocateLocalPartition.class, this::allocateLocalPartition)
                 .match(BecomeLeader.class, this::becomeLeader)
                 .match(PutNewData.class, this::putData)
-                .match(SnapshotReplica.class, this::snapshotReplica)
+                .match(SnapshotReplicaRequest.class, m -> snapshotReplicaRequest())
                 .match(GetPutUpdate.class, this::getPutUpdate)
                 .match(GetData.class, this::getData)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+    private void snapshotReplicaRequest(){
+        iAmLeader = false;
+        otherReplicas = null;
+        sender().tell(new SnapshotReplica(partition.getPartitionCopy()), self());
     }
 
     //Get request by a Router
@@ -79,12 +85,12 @@ public class PartitionActor extends AbstractActor {
     }
 
     //snapshot received by the leader (cause i wasn't able to answer to the update in time)
-    private void snapshotReplica(SnapshotReplica message){
+    /*private void snapshotReplica(SnapshotReplica message){
         log.info("Just received a snapshot replica cause i didnt answer to putUpdate in time");
         if (partition.getState() < message.getReplica().getState())
             partition = message.getReplica();
 
-    }
+    }*/
 
     //become leader request from the master, retrieving all the replica's actorRef
     private void becomeLeader(BecomeLeader message){
@@ -129,7 +135,7 @@ public class PartitionActor extends AbstractActor {
                         Await.result(reply, Duration.Inf());
                     } catch (TimeoutException e) {
                         //just in case he wasn't able to answer in time, at least he will eventually receive the update
-                        otherReplica.tell(new SnapshotReplica(this.partition), self());
+                        //otherReplica.tell(new SnapshotReplica(this.partition), self());
                         //todo meglio implementarsi a mano una stash su ogni partition
                         //todo stasho richieste di snapshot dal master finchè non ricevo le put??? risky but it should work
                     }

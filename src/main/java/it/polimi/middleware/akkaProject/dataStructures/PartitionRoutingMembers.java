@@ -2,23 +2,24 @@ package it.polimi.middleware.akkaProject.dataStructures;
 
 import akka.actor.ActorSelection;
 import akka.actor.Address;
+import akka.cluster.Member;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
 /** This class stores the addresses of all the Replicas of a Partition*/
-public class PartitionRoutingAddresses implements Serializable {
+public class PartitionRoutingMembers implements Serializable {
     private final int partitionId;
-    private List<Address> replicas = new ArrayList<>(); //leader included
-    private Address leader;
+    private List<Member> replicas = new ArrayList<>(); //leader included
+    private Member leader; //può essere null
 
-    public PartitionRoutingAddresses(int partitionId, Address leader) {
+    public PartitionRoutingMembers(int partitionId, Member leader) {
         this.partitionId = partitionId;
         this.leader = leader;
     }
 
-    public PartitionRoutingAddresses(int partitionId) {
+    public PartitionRoutingMembers(int partitionId) {
         this.partitionId = partitionId;
     }
 
@@ -26,19 +27,19 @@ public class PartitionRoutingAddresses implements Serializable {
         return partitionId;
     }
 
-    public List<Address> getReplicas() {
+    public List<Member> getReplicas() {
         return replicas;
     }
 
-    public void setReplicas(List<Address> replicas) {
+    public void setReplicas(List<Member> replicas) {
         this.replicas = replicas;
     }
 
-    public Address getLeader() {
+    public Member getLeader() {
         return leader;
     }
 
-    public void setLeader(Address leader) {
+    public void setLeader(Member leader) {
         this.leader = leader;
     }
 }

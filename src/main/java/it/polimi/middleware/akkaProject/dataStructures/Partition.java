@@ -15,8 +15,9 @@ public class Partition implements Serializable{
         map = new HashMap<>();
     }
 
-    public Partition(int partitionId, HashMap<Serializable, DataWithTimestamp> map) {
+    public Partition(int partitionId, int state, HashMap<Serializable, DataWithTimestamp> map) {
         this.partitionId = partitionId;
+        this.state = state;
         this.map = map;
     }
 
@@ -37,7 +38,7 @@ public class Partition implements Serializable{
     }
 
     public Partition getPartitionCopy(){
-        return new Partition(partitionId, new HashMap<>(map));
+        return new Partition(partitionId, state, new HashMap<>(map));
     }
 }
 

@@ -46,6 +46,7 @@ public class RouterActor extends AbstractActor {
         partitionRoutingActorRefs = message.getList();
     }
 
+
     public void getData(GetData message){
         int partitionId = message.getKey().hashCode() % partitionRoutingActorRefs.size();
         Collections.shuffle(partitionRoutingActorRefs.get(partitionId).getReplicas());
@@ -65,6 +66,7 @@ public class RouterActor extends AbstractActor {
 
     }
 
+    //todo caso in cui il leader è null
     public void putNewData(PutNewData message) {
         int partitionId = message.getKey().hashCode() % partitionRoutingActorRefs.size();
         ActorRef leader = partitionRoutingActorRefs.get(partitionId).getLeader();

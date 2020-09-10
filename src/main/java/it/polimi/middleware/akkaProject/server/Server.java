@@ -6,7 +6,6 @@ import com.typesafe.config.ConfigFactory;
 import com.typesafe.config.ConfigValueFactory;
 
 import java.io.File;
-import java.net.Inet4Address;
 import java.net.UnknownHostException;
 import java.util.Collections;
 
@@ -16,8 +15,8 @@ public class Server {
         final Config config = ConfigFactory //
                 .parseFile(new File("conf/cluster.conf")) //
                 .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("server")))
-                .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(Collections.singleton("akka.tcp://ClusterSystem@"+masterIp+":1234")))//
-                .withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
+                .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(Collections.singleton("akka.tcp://ClusterSystem@"+masterIp+":1234")));//
+                //.withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
         //todo da cambiare con ip che altri utilizzano per contattare questo
 
         int numberOfPartitions = config.getInt("numberOfPartitions");
