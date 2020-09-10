@@ -241,6 +241,10 @@ public class MasterActor extends AbstractActor {
                         partitionRoutingMembers.get(partitionId).setLeader(newLeader);
                         membersHashMap.get(newLeader).getPartitionInfos().stream().filter(k -> k.getPartitionId() == partitionId).findAny().get().setIAmLeader(true);
                         log.info("Elected NEW leader of Partition "+partitionId + " on "+newLeader.address());
+                        RoutingConfigurationUpdate update = new RoutingConfigurationUpdate(partitionId, partitionRoutingMembers.get(partitionId));
+                        for (Member member : membersHashMap.keySet()) {
+                            getContext().actorSelection(member.address() + "/user/routerManager").tell(update, self());
+                        }
                     }
                 }
                 catch (Exception e){
@@ -252,6 +256,12 @@ public class MasterActor extends AbstractActor {
             }
         }
         log.info("RELOCATION COMPLETED");
+        balanceNodes();
+    }
+
+    private void balanceNodes(){
+
+
     }
 
     //initial set up

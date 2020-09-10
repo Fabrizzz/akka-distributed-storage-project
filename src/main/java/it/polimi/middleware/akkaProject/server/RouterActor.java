@@ -38,8 +38,15 @@ public class RouterActor extends AbstractActor {
                 .match(RoutingActorRefInitialConfiguration.class, this::initialConfiguration)
                 .match(GetData.class, this::getData)
                 .match(PutNewData.class, this::putNewData)
+                .match(RoutingActorRefUpdate.class, this::update)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+    public void update(RoutingActorRefUpdate message){
+        partitionRoutingActorRefs.remove(message.getPartitionId());
+        partitionRoutingActorRefs.add(message.getPartitionId(),message.getList());
+        log.info("Routing Infos updated about partition: " + message.getPartitionId());
     }
 
     public void initialConfiguration(RoutingActorRefInitialConfiguration message){

@@ -11,7 +11,7 @@ import java.util.Collections;
 
 public class Server {
     public static void main( String[] args ) throws UnknownHostException {
-        String masterIp = "127.0.0.1"; //todo cambiare con ip del Master
+        String masterIp = "192.168.43.135"; //todo cambiare con ip del Master
         final Config config = ConfigFactory //
                 .parseFile(new File("conf/cluster.conf")) //
                 .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("server")))

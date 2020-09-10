@@ -12,10 +12,7 @@ import akka.actor.Props;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingActorRefs;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingMembers;
-import it.polimi.middleware.akkaProject.messages.GetData;
-import it.polimi.middleware.akkaProject.messages.RoutingActorRefInitialConfiguration;
-import it.polimi.middleware.akkaProject.messages.RoutingConfigurationMessage;
-import it.polimi.middleware.akkaProject.messages.PutNewData;
+import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
@@ -51,6 +48,7 @@ public class RouterManagerActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
                 .match(RoutingConfigurationMessage.class, this::initialConfiguration)
+                .match(RoutingConfigurationUpdate.class, this::update)
                 .match(GetData.class, this::getData)
                 .match(PutNewData.class, this::putNewData)
                 .matchAny(o -> log.error("received unknown message"))
@@ -66,7 +64,32 @@ public class RouterManagerActor extends AbstractActor {
         routers.get(currentRouter++ % routers.size()).forward(message,getContext());
     }
 
-    //todo forse era più semplice usare gli address e basta?
+    public void update(RoutingConfigurationUpdate message){
+        int partitionId = message.getPartitionId();
+        PartitionRoutingActorRefs currentPartitionRoutingActorRefs = new PartitionRoutingActorRefs(partitionId);
+        Future<ActorRef> reply = getContext().actorSelection(message.getPartitionRoutingMembers().getLeader().address() + "/user/supervisor/partition"+ partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+        try {
+            currentPartitionRoutingActorRefs.setLeader( Await.result(reply, Duration.Inf()));
+            currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
+        } catch (Exception e) {
+            log.error("Couldn't contact the leader of replica: " + message.getPartitionId());
+        }
+        for (Member member : message.getPartitionRoutingMembers().getReplicas()) {
+            if (!member.equals(message.getPartitionRoutingMembers().getLeader())) {
+                reply = getContext().actorSelection(member.address() + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                try {
+                    currentPartitionRoutingActorRefs.getReplicas().add(Await.result(reply, Duration.Inf()));
+                } catch (Exception e) {
+                    log.error("Couldn't contact replica: " + member.address() + " of partition" + partitionId);
+                }
+            }
+        }
+        RoutingActorRefUpdate update = new RoutingActorRefUpdate(partitionId, currentPartitionRoutingActorRefs);
+        for (ActorRef router : routers) {
+            router.tell(update, self());
+        }
+    }
+
     public void initialConfiguration(RoutingConfigurationMessage message){
             ArrayList<PartitionRoutingActorRefs> newPartitionRoutingActorRefs = new ArrayList<>();
             for (PartitionRoutingMembers currentPartitionRoutingMembers : message.getPartitionRoutingInfos()) {
