@@ -13,6 +13,7 @@ import akka.cluster.Member;
 import akka.cluster.MemberStatus;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
+import it.polimi.middleware.akkaProject.messages.ClusterChange;
 import it.polimi.middleware.akkaProject.messages.InitialMembers;
 
 import java.util.ArrayList;
@@ -50,20 +51,19 @@ public class ClusterListener extends AbstractActor {
 
     private void onMemberUp(MemberUp msg) {
         log.info("Member is Up: {}", msg.member());
-		//todo manda nodo al master
+        master.tell(new ClusterChange(), self());
     }
 
     private void onUnreachableMember(UnreachableMember msg) {
 
         log.info("Member detected as unreachable: {}", msg.member());
         cluster.down(msg.member().address());
-        //todo segnala nodo down al master, se i membri sono meno di R, shutdowna tutto
+
     }
 
     private void onMemberRemoved(MemberRemoved msg) {
-
-        //todo segnala nodo al master
         log.info("Member is Removed: {}", msg.member());
+        master.tell(new ClusterChange(), self());
     }
 
     private void onClusterState(ClusterEvent.CurrentClusterState msg) {

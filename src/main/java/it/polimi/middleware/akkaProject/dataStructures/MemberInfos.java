@@ -25,13 +25,16 @@ public class MemberInfos implements Serializable, Comparable<MemberInfos> {
         return partitionInfos;
     }
 
-    /** può ritornare null*/
     public ActorRef getSupervisorReference() {
         return supervisorReference;
     }
 
     public void setSupervisorReference(ActorRef supervisorReference) {
         this.supervisorReference = supervisorReference;
+    }
+
+    public int getSize(){
+        return partitionInfos.size();
     }
 
     @Override
@@ -60,7 +63,7 @@ public class MemberInfos implements Serializable, Comparable<MemberInfos> {
             this.partitionId = partitionId;
         }
 
-        public void setiAmLeader(boolean iAmLeader) {
+        public void setIAmLeader(boolean iAmLeader) {
             this.iAmLeader = iAmLeader;
         }
     }

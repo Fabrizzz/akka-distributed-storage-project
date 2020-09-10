@@ -130,6 +130,8 @@ public class PartitionActor extends AbstractActor {
                     } catch (TimeoutException e) {
                         //just in case he wasn't able to answer in time, at least he will eventually receive the update
                         otherReplica.tell(new SnapshotReplica(this.partition), self());
+                        //todo meglio implementarsi a mano una stash su ogni partition
+                        //todo stasho richieste di snapshot dal master finchè non ricevo le put??? risky but it should work
                     }
                 }
                 sender().tell(new PutCompleted(), getSelf());
