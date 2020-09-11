@@ -27,6 +27,7 @@ public class PartitionActor extends AbstractActor {
     private Partition partition;
     private boolean iAmLeader = false;
     private List<ActorRef> otherReplicas; //useful only if i am the leader
+    int timeoutMultiplier = 1;
 
 
     public static Props props() {
@@ -42,6 +43,7 @@ public class PartitionActor extends AbstractActor {
                 .match(SnapshotReplicaRequest.class, m -> snapshotReplicaRequest())
                 .match(GetPutUpdate.class, this::getPutUpdate)
                 .match(GetData.class, this::getData)
+                .match(SnapshotReplica.class, this::snapshotReplica)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
     }
@@ -84,12 +86,12 @@ public class PartitionActor extends AbstractActor {
     }
 
     //snapshot received by the leader (cause i wasn't able to answer to the update in time)
-    /*private void snapshotReplica(SnapshotReplica message){
+    private void snapshotReplica(SnapshotReplica message){
         log.info("Just received a snapshot replica cause i didnt answer to putUpdate in time");
         if (partition.getState() < message.getReplica().getState())
             partition = message.getReplica();
 
-    }*/
+    }
 
     //become leader request from the master, retrieving all the replica's actorRef
     private void becomeLeader(BecomeLeader message){
@@ -127,17 +129,20 @@ public class PartitionActor extends AbstractActor {
                 partition.getMap().put(message.getKey(), message.getData());
                 partition.incrementState();
                 System.out.println("I am the leader, i accepted a Put and my state is now: " + partition.getState());
+                boolean allSuccess= true;
                 for (ActorRef otherReplica : otherReplicas) {
-                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 1000);
+                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 1000* timeoutMultiplier);
                     try {
                         Await.result(reply, Duration.Inf());
                     } catch (TimeoutException e) {
                         //just in case he wasn't able to answer in time, at least he will eventually receive the update
-                        //otherReplica.tell(new SnapshotReplica(this.partition), self());
-                        //todo meglio implementarsi a mano una stash su ogni partition
-                        //todo stasho richieste di snapshot dal master finchè non ricevo le put??? risky but it should work
+                        allSuccess = false;
+                        timeoutMultiplier++;
+                        otherReplica.tell(new SnapshotReplica(this.partition), self());
                     }
                 }
+                if (allSuccess)
+                    timeoutMultiplier = 1;
                 sender().tell(new PutCompleted(), getSelf());
                 log.info("Just completed a Put Request");
             }

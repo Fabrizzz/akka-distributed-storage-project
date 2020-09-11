@@ -25,18 +25,16 @@ import java.util.stream.Collectors;
 
 public class MasterActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    private Cluster cluster = Cluster.get(getContext().system());
+    private final Cluster cluster = Cluster.get(getContext().system());
 
-    private List<PartitionRoutingMembers> partitionRoutingMembers; //per ogni partizione mi dice quali server la hanno e chi è il leader
+    private final List<PartitionRoutingMembers> partitionRoutingMembers; //per ogni partizione mi dice quali server la hanno e chi è il leader
+    private final HashMap<Member, MemberInfos> membersHashMap = new HashMap<>();
+    private ArrayList<MemberInfos> orderedMemberInfos;
 
-    private HashMap<Member, MemberInfos> membersHashMap = new HashMap<>();
+    private int timeoutMultiplier = 0;
 
-    ArrayList<MemberInfos> orderedMemberInfos;
-
-    int timeoutMultiplier = 0;
-
-    private int numberOfPartitions;
-    private int numberOfReplicas;
+    private final int numberOfPartitions;
+    private final int numberOfReplicas;
 
     public MasterActor(int numberOfPartitions, int numberOfReplicas) {
         this.numberOfPartitions = numberOfPartitions;
@@ -422,8 +420,7 @@ public class MasterActor extends AbstractActor {
 
     private void updateMembersListRequest(UpdateMemberListRequest message){
         ArrayList<Address> list = new ArrayList<>();
-        for (Member member : cluster.state().getMembers()) {
-            if (member.status().equals(MemberStatus.up()) && member.hasRole("server"))
+        for (Member member : membersHashMap.keySet()) {
                 list.add(member.address());
         }
         sender().tell(new UpdateMemberListAnswer(list), self());
@@ -442,24 +439,5 @@ public class MasterActor extends AbstractActor {
         System.out.println("I am dead: " + getContext().getSelf().path());
         getContext().system().terminate();
 
-    }
-
-    //unwatcha e uccide i figli e chiama postStop
-    @Override
-    public void preRestart(Throwable reason, Optional<Object> message) throws Exception {
-        System.out.println("I am restarting " + getContext().getSelf().path());
-        log.error(
-                reason,
-                "Restarting due to [{}] when processing [{}]",
-                reason.getMessage(),
-                message.orElse(""));
-        super.preRestart(reason,message);
-    }
-
-    //chiama preStart
-    @Override
-    public void postRestart(Throwable reason) throws Exception {
-        System.out.println("I restarted " + getContext().getSelf().path());
-        super.postRestart(reason);
     }
 }

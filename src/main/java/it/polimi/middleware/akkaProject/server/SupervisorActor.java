@@ -33,8 +33,19 @@ public class SupervisorActor extends AbstractActor {
                 .match(BecomeLeader.class, this::becomeLeader)
                 .match(SnapshotReplicaRequest.class, this::snapshotReplicaRequest)
                 .match(DeletePartition.class, this::deletePartition)
+                .match(Terminated.class, this::onTerminated)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
+    }
+
+    private void onTerminated(Terminated message){
+        ActorRef partition = getSender();
+        for (int i = 0; i < localPartitions.length; i++) {
+            if (localPartitions[i].equals(partition)) {
+                localPartitions[i] = null;
+                break;
+            }
+        }
     }
 
     public void deletePartition(DeletePartition message){
@@ -72,7 +83,6 @@ public class SupervisorActor extends AbstractActor {
         if (localPartitions[partitionId] == null) {
             localPartitions[partitionId] = getContext().actorOf(PartitionActor.props(), "partition"+partitionId);
             getContext().watch(localPartitions[partitionId]);
-            //todo gestirlo
         }
         localPartitions[partitionId].forward(message, getContext());
 
