@@ -10,7 +10,7 @@ import java.util.ArrayList;
  */
 public class MemberInfos implements Serializable, Comparable<MemberInfos> {
     private final Member member;
-    private ArrayList<PartitionInfo> partitionInfos = new ArrayList<>();
+    private final ArrayList<PartitionInfo> partitionInfos = new ArrayList<>();
     private ActorRef supervisorReference;
 
     public MemberInfos(Member member) {

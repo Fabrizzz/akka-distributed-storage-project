@@ -24,9 +24,7 @@ import java.util.concurrent.TimeoutException;
 
 public class RouterActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    Cluster cluster = Cluster.get(getContext().system());
     List<PartitionRoutingActorRefs> partitionRoutingActorRefs;
-    //todo check che partitionInfos sia esattamente uguale al numero di partitions
 
     public static Props props() {
         return Props.create(RouterActor.class);
@@ -66,14 +64,14 @@ public class RouterActor extends AbstractActor {
                     return;
                 }
             } catch (Exception e) {
-                log.warning("Couldn't receive any answer in time", e);
+                log.warning("Couldn't receive any get answer in time from " + replica.path(), e);
             }
         }
         sender().forward(new DataNotFound(), getContext());
+        log.warning("Nobody answered to the Get Request");
 
     }
 
-    //todo caso in cui il leader è null
     public void putNewData(PutNewData message) {
         int partitionId = message.getKey().hashCode() % partitionRoutingActorRefs.size();
         ActorRef leader = partitionRoutingActorRefs.get(partitionId).getLeader();
@@ -82,9 +80,8 @@ public class RouterActor extends AbstractActor {
             try {
                 sender().forward(Await.result(reply, Duration.Inf()), getContext());
             } catch (Exception e) {
-                log.warning("Couldn't receive any answer in time", e);
+                log.warning("Couldn't receive any put confirmation in time", e);
             }
-            //todo altrimenti comunica "riprova più tardi"
         }
     }
 

@@ -91,6 +91,8 @@ public class MasterActor extends AbstractActor {
                 currentMemberInfos.setSupervisorReference(supervisor);
                 membersHashMap.put(newMember, currentMemberInfos);
                 orderedMemberInfos.add(currentMemberInfos);
+                RoutingConfigurationMessage configuration = new RoutingConfigurationMessage(partitionRoutingMembers);
+                getContext().actorSelection(newMember.address() + "/user/routerManager").tell(configuration, self());
             } catch (Exception e) {
                 log.warning("Unable to retrieve supervisor ActorRef of new Node: " + newMember.address());
                 membersToRemove.add(newMember);
@@ -120,7 +122,6 @@ public class MasterActor extends AbstractActor {
             membersHashMap.remove(deadMember);
 
         }
-        //todo comunico subito cambiamento partitionRoutingInfos?
 
         Collections.sort(orderedMemberInfos);
     }
@@ -139,7 +140,8 @@ public class MasterActor extends AbstractActor {
         Queue<Integer> partitionsToRelocate = new LinkedList<>();
 
         for (PartitionRoutingMembers partition : partitionRoutingMembers) {
-            if (partition.getReplicas().size() < numberOfReplicas) {
+            if (partition.getReplicas().size() < numberOfReplicas
+            || partition.getLeader() == null) {
                 partitionsToRelocate.add(partition.getPartitionId());
             }
 
@@ -230,7 +232,7 @@ public class MasterActor extends AbstractActor {
                     List<Address> otherReplicas = partitionRoutingMembers.get(partitionId).getReplicas().stream().map(Member::address).collect(Collectors.toList());
                     otherReplicas.remove(newLeader.address());
                     Future<Object> reply = Patterns.ask(membersHashMap.get(newLeader)
-                            .getSupervisorReference(), new BecomeLeader(partitionId, otherReplicas), 1000*timeoutMultiplier);
+                            .getSupervisorReference(), new BecomeLeader(partitionId, otherReplicas), 2000*timeoutMultiplier);
                     Object secondReply = Await.result(reply, Duration.Inf());
                     if (secondReply instanceof UnableToContactReplicas) {
                         log.warning("Unable to elect the leader of Partition "+partitionId + " on "+newLeader.address());
@@ -260,6 +262,78 @@ public class MasterActor extends AbstractActor {
     }
 
     private void balanceNodes(){
+        if (membersHashMap.size() != orderedMemberInfos.size())
+            System.err.println("FATAL ERROR");
+        Collections.sort(orderedMemberInfos);
+
+        while (orderedMemberInfos.get(0).getSize() < orderedMemberInfos.get(orderedMemberInfos.size()-1).getSize()-1){
+            int partitionId = orderedMemberInfos.get(orderedMemberInfos.size()-1).getPartitionInfos().stream()
+                    .filter(k -> orderedMemberInfos.get(0).getPartitionInfos().stream().noneMatch(h -> h.getPartitionId() == k.getPartitionId())).findAny().get().getPartitionId();
+
+            Member leader = partitionRoutingMembers.get(partitionId).getLeader();
+            MemberInfos newMember = orderedMemberInfos.get(0);
+            MemberInfos memberToDelete = orderedMemberInfos.get(orderedMemberInfos.size()-1);
+            Partition snapshot = null;
+            try {
+                Future<Object> reply = Patterns.ask(membersHashMap.get(leader).getSupervisorReference(), new SnapshotReplicaRequest(partitionId), 1000 );
+                snapshot = ((SnapshotReplica) Await.result(reply, Duration.Inf())).getReplica();
+                partitionRoutingMembers.get(partitionId).setLeader(null);
+                membersHashMap.get(leader).getPartitionInfos().stream().filter(k -> k.getPartitionId() == partitionId).findAny().get().setIAmLeader(false);
+                log.info("Just obtained the snapshot of Partition " + partitionId + "from leader " + leader.address());
+            } catch (Exception e) {
+                log.warning("Unable to contact the leader of Partition:" + partitionId + " on " + leader.address(), e);
+                getContext().system().scheduler().scheduleOnce(java.time.Duration.of(1, ChronoUnit.SECONDS), self(), new ClusterChange(), getContext().getDispatcher(), self());
+                return;
+            }
+
+            try {
+                Future<Object> reply = Patterns.ask(newMember.getSupervisorReference(),new AllocateLocalPartition(snapshot), 1000);
+                Await.result(reply, Duration.Inf());
+                newMember.getPartitionInfos().add(new MemberInfos.PartitionInfo(partitionId, false));
+                partitionRoutingMembers.get(partitionId).getReplicas().add(newMember.getMember());
+            } catch (Exception e) {
+                log.warning("Unable to allocate Partition" + partitionId + "on " + newMember.getMember().address());
+                return;
+            }
+            memberToDelete.getSupervisorReference().tell(new DeletePartition(partitionId), self());
+            partitionRoutingMembers.get(partitionId).getReplicas().remove(memberToDelete.getMember());
+            for (int i = 0; i < memberToDelete.getPartitionInfos().size(); i++) {
+                if (memberToDelete.getPartitionInfos().get(i).getPartitionId() == partitionId){
+                    memberToDelete.getPartitionInfos().remove(i);
+                    break;
+                }
+            }
+
+            try {
+                Member newLeader = partitionRoutingMembers.get(partitionId).getReplicas().get(0);
+                List<Address> otherReplicas = partitionRoutingMembers.get(partitionId).getReplicas().stream().map(Member::address).collect(Collectors.toList());
+                otherReplicas.remove(newLeader.address());
+                Future<Object> reply = Patterns.ask(membersHashMap.get(newLeader)
+                        .getSupervisorReference(), new BecomeLeader(partitionId, otherReplicas), 2000);
+                Object secondReply = Await.result(reply, Duration.Inf());
+                if (secondReply instanceof UnableToContactReplicas) {
+                    log.warning("Unable to elect the leader of Partition "+partitionId + " on "+newLeader.address());
+                    getContext().system().scheduler().scheduleOnce(java.time.Duration.of(1, ChronoUnit.SECONDS), self(), new ClusterChange(), getContext().getDispatcher(), self());
+                    return;
+                }
+                else {
+                    partitionRoutingMembers.get(partitionId).setLeader(newLeader);
+                    membersHashMap.get(newLeader).getPartitionInfos().stream().filter(k -> k.getPartitionId() == partitionId).findAny().get().setIAmLeader(true);
+                    log.info("Elected NEW leader of Partition "+partitionId + " on "+newLeader.address());
+                    RoutingConfigurationUpdate update = new RoutingConfigurationUpdate(partitionId, partitionRoutingMembers.get(partitionId));
+                    for (Member member : membersHashMap.keySet()) {
+                        getContext().actorSelection(member.address() + "/user/routerManager").tell(update, self());
+                    }
+                }
+            }
+            catch (Exception e){
+                log.warning("Unable to elect the leader of Partition "+partitionId + " on "+partitionRoutingMembers.get(partitionId).getReplicas().get(0).address());
+                getContext().system().scheduler().scheduleOnce(java.time.Duration.of(1, ChronoUnit.SECONDS), self(), new ClusterChange(), getContext().getDispatcher(), self());
+                return;
+            }
+
+            Collections.sort(orderedMemberInfos);
+        }
 
 
     }
@@ -281,7 +355,6 @@ public class MasterActor extends AbstractActor {
 
 
 
-        //todo ask per allocate Local Partition, altrimenti il successivo becomeLeader potrebbe fallire
         int currentMember = 0;
         for (int partitionId = 0; partitionId < numberOfPartitions; partitionId++) {
             partitionRoutingMembers.add(new PartitionRoutingMembers(partitionId, members.get(currentMember % members.size()))); //create partitionRoutingInfo and set the leader

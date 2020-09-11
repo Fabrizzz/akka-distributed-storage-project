@@ -1,14 +1,12 @@
 package it.polimi.middleware.akkaProject.server;
 
-import akka.actor.AbstractActor;
-import akka.actor.ActorRef;
-import akka.actor.Address;
+import akka.actor.*;
 import akka.cluster.Cluster;
 import akka.cluster.Member;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
-import akka.actor.Props;
+import akka.japi.pf.DeciderBuilder;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingActorRefs;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingMembers;
@@ -26,7 +24,6 @@ import java.util.concurrent.TimeUnit;
 
 public class RouterManagerActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-    Cluster cluster = Cluster.get(getContext().system());
 
     private final int numberOfRouters;
     private List<ActorRef> routers;
@@ -41,9 +38,16 @@ public class RouterManagerActor extends AbstractActor {
         return Props.create(RouterManagerActor.class, maxNumWorkers);
     }
 
-    //todo in caso di Exception restartare?
+    @Override
+    public SupervisorStrategy supervisorStrategy() {
+        return new OneForOneStrategy(//
+                1, //
+                Duration.create("10 seconds"), //
+                DeciderBuilder //
+                        .match(Exception.class, ex -> SupervisorStrategy.resume()) //
+                        .build());
+    }
 
-    //todo RoutingConfigurationUpdate dal master
     @Override
     public Receive createReceive() {
         return receiveBuilder()
@@ -54,6 +58,7 @@ public class RouterManagerActor extends AbstractActor {
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
     }
+
 
 
     public void getData(GetData message){
@@ -72,7 +77,7 @@ public class RouterManagerActor extends AbstractActor {
             currentPartitionRoutingActorRefs.setLeader( Await.result(reply, Duration.Inf()));
             currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
         } catch (Exception e) {
-            log.error("Couldn't contact the leader of replica: " + message.getPartitionId());
+            log.warning("Couldn't contact the leader of replica: " + message.getPartitionId(), e);
         }
         for (Member member : message.getPartitionRoutingMembers().getReplicas()) {
             if (!member.equals(message.getPartitionRoutingMembers().getLeader())) {
@@ -80,7 +85,7 @@ public class RouterManagerActor extends AbstractActor {
                 try {
                     currentPartitionRoutingActorRefs.getReplicas().add(Await.result(reply, Duration.Inf()));
                 } catch (Exception e) {
-                    log.error("Couldn't contact replica: " + member.address() + " of partition" + partitionId);
+                    log.warning("Couldn't contact replica: " + member.address() + " of partition" + partitionId, e);
                 }
             }
         }
@@ -115,7 +120,7 @@ public class RouterManagerActor extends AbstractActor {
                 newPartitionRoutingActorRefs.add(currentPartitionRoutingActorRefs);
             }
 
-            log.info("Finished obtaing all the Replicas ActorRef");
+            log.info("Finished obtaining all the Replicas ActorRef");
 
 
         for (ActorRef router : routers) {
@@ -137,7 +142,7 @@ public class RouterManagerActor extends AbstractActor {
     @Override
     public void postStop(){
         System.out.println("I just died: " + getContext().getSelf().path());
-        cluster.leave(cluster.selfMember().address());
+
 
     }
 

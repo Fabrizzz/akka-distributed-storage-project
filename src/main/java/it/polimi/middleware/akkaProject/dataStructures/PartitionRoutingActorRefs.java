@@ -12,8 +12,8 @@ import java.util.List;
 
 public class PartitionRoutingActorRefs implements Serializable {
     private final int partitionId;
-    private List<ActorRef> replicas = new ArrayList<>(); //leader included
-    private ActorRef leader; //it can be null is the routerManager wasn't able to contact it
+    private final List<ActorRef> replicas = new ArrayList<>(); //leader included
+    private ActorRef leader; //it can be null if the routerManager wasn't able to contact it
 
     public PartitionRoutingActorRefs(int partitionId) {
         this.partitionId = partitionId;

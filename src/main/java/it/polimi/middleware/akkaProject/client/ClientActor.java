@@ -66,7 +66,7 @@ public class ClientActor extends AbstractActor {
         } catch (Exception e) {
             System.out.println("Couldn't contact the master");
         }
-        System.out.println("Finished retreiving all the member's actorRef");
+        System.out.println("Finished retrieving all the member's actorRef");
     }
 
     private void putNewData(PutNewData message) {

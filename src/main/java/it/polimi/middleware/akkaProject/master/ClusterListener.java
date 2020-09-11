@@ -58,6 +58,7 @@ public class ClusterListener extends AbstractActor {
 
         log.info("Member detected as unreachable: {}", msg.member());
         cluster.down(msg.member().address());
+        master.tell(new ClusterChange(), self());
 
     }
 
@@ -78,7 +79,7 @@ public class ClusterListener extends AbstractActor {
     }
 
     private void onMemberEvent(MemberEvent msg) {
-        System.out.println("I just ignored " + msg.getClass().getCanonicalName());
+        log.info("I just ignored " + msg.getClass().getCanonicalName());
     }
 
     @Override

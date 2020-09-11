@@ -58,7 +58,6 @@ public class PartitionActor extends AbstractActor {
         boolean sentReply = false;
         if (partition.getMap().containsKey(message.getKey())) {
             DataWithTimestamp data = partition.getMap().get(message.getKey());
-            //todo testare sta roba
             if (data.getGeneratedAt().compareTo(message.getGeneratedAtLeastAt()) >= 0) {
                 sender().tell(new DataReply(partition.getMap().get(message.getKey())), self());
                 log.info("Just sent the get Reply");
@@ -81,7 +80,7 @@ public class PartitionActor extends AbstractActor {
         }
         else
             log.warning("Couldn't elaborate put Update because wrong partition state");
-        //todo mandare una risposta anche se rifiuto? dire perchè?
+
     }
 
     //snapshot received by the leader (cause i wasn't able to answer to the update in time)
@@ -119,7 +118,6 @@ public class PartitionActor extends AbstractActor {
             sender().tell(new NotALeader(), self());
         }
         else{
-            //todo test this shit
             if (partition.getMap().containsKey(message.getKey()) && partition.getMap().get(message.getKey()).getGeneratedAt().compareTo(message.getData().getGeneratedAt()) >= 0) {
                 sender().tell(new DataIsTooOld(), self());
                 log.info("Just refused a Put Request cause it is too old");

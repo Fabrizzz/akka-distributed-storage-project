@@ -6,10 +6,7 @@ import akka.event.Logging;
 import akka.event.LoggingAdapter;
 
 import akka.japi.pf.DeciderBuilder;
-import it.polimi.middleware.akkaProject.messages.AllocateLocalPartition;
-import it.polimi.middleware.akkaProject.messages.AllocationCompleted;
-import it.polimi.middleware.akkaProject.messages.BecomeLeader;
-import it.polimi.middleware.akkaProject.messages.SnapshotReplicaRequest;
+import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.duration.Duration;
 
 
@@ -35,10 +32,17 @@ public class SupervisorActor extends AbstractActor {
                 .match(AllocateLocalPartition.class, this::allocateLocalPartition)
                 .match(BecomeLeader.class, this::becomeLeader)
                 .match(SnapshotReplicaRequest.class, this::snapshotReplicaRequest)
+                .match(DeletePartition.class, this::deletePartition)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
     }
 
+    public void deletePartition(DeletePartition message){
+        int partitionId = message.getPartitionId();
+        if (localPartitions[partitionId] != null)
+            localPartitions[partitionId].tell(akka.actor.PoisonPill.getInstance(), self());
+        localPartitions[partitionId] = null;
+    }
 
 
     private void snapshotReplicaRequest(SnapshotReplicaRequest message){
@@ -48,12 +52,10 @@ public class SupervisorActor extends AbstractActor {
     }
 
     private void becomeLeader(BecomeLeader message){
-        //todo risposta nel caso non esista la partizione?
         if (localPartitions[message.getPartitionId()] != null)
             localPartitions[message.getPartitionId()].forward(message, getContext());
     }
 
-    //todo casi particolari da gestire?
     @Override
     public SupervisorStrategy supervisorStrategy() {
         return new AllForOneStrategy(//
@@ -64,15 +66,16 @@ public class SupervisorActor extends AbstractActor {
                         .build());
     }
 
-    //todo cosa fare in caso di Exception? termina tutto -> escalate all for one strat
+
     private void allocateLocalPartition(AllocateLocalPartition message){
         int partitionId = message.getPartition().getPartitionId();
         if (localPartitions[partitionId] == null) {
             localPartitions[partitionId] = getContext().actorOf(PartitionActor.props(), "partition"+partitionId);
             getContext().watch(localPartitions[partitionId]);
-            //todo è necessario watchare?
+            //todo gestirlo
         }
         localPartitions[partitionId].forward(message, getContext());
+
         sender().tell(new AllocationCompleted(),self());
     }
 
