@@ -352,7 +352,7 @@ public class MasterActor extends AbstractActor {
         }
 
 
-
+        //allocate local partitions and chose leader
         int currentMember = 0;
         for (int partitionId = 0; partitionId < numberOfPartitions; partitionId++) {
             partitionRoutingMembers.add(new PartitionRoutingMembers(partitionId, members.get(currentMember % members.size()))); //create partitionRoutingInfo and set the leader
@@ -384,6 +384,7 @@ public class MasterActor extends AbstractActor {
             membersHashMap.put(memberInfo.getMember(), memberInfo);
         }
 
+        //leader election
         for (MemberInfos memberInfo : memberInfos) {
             for (MemberInfos.PartitionInfo partition : memberInfo.getPartitionInfos()) {
                 if (partition.iAmLeader()) {

@@ -14,8 +14,8 @@ public class Server {
         String masterIp = "127.0.0.1"; //cambiare con ip del Master
         final Config config = ConfigFactory //
                 .parseFile(new File("conf/cluster.conf")) //
-                .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("server")))
-                .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(Collections.singleton("akka.tcp://ClusterSystem@"+masterIp+":1234")));//
+                .withValue("akka.cluster.roles", ConfigValueFactory.fromIterable(Collections.singletonList("server")));
+                //.withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(Collections.singleton("akka.tcp://ClusterSystem@"+masterIp+":1234")));//
                 //.withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
         //da cambiare con ip che altri utilizzano per contattare questo
 
