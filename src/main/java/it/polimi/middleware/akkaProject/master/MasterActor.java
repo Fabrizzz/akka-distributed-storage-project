@@ -69,6 +69,7 @@ public class MasterActor extends AbstractActor {
         ArrayList<Member> newMembers = new ArrayList<>();
 
 
+        //getting list of upMembers
         cluster.state().getMembers().forEach(member -> {
             if (member.status().equals(MemberStatus.up()) && (member.hasRole("server"))) {
                 currentlyUpMembers.add(member);
@@ -81,6 +82,7 @@ public class MasterActor extends AbstractActor {
 
         ArrayList<Member> membersToRemove = new ArrayList<>();
 
+        //creating MemberInfo for each new node
         for (Member newMember : newMembers) {
             MemberInfos currentMemberInfos = new MemberInfos(newMember);
             try {
@@ -99,6 +101,7 @@ public class MasterActor extends AbstractActor {
         }
 
         currentlyUpMembers.removeAll(membersToRemove);
+
 
         ArrayList<Member> deadMembers = new ArrayList<>();
         for (Member member : membersHashMap.keySet()) {
@@ -137,6 +140,7 @@ public class MasterActor extends AbstractActor {
 
         Queue<Integer> partitionsToRelocate = new LinkedList<>();
 
+        //getting the list of partitions to relocate
         for (PartitionRoutingMembers partition : partitionRoutingMembers) {
             if (partition.getReplicas().size() < numberOfReplicas
             || partition.getLeader() == null) {
@@ -174,12 +178,9 @@ public class MasterActor extends AbstractActor {
                     return;
                 }
             } else {
-
                 for (Member replicaMember : replicaMembers) {
                     try {
                         Future<Object> reply = Patterns.ask(membersHashMap.get(replicaMember).getSupervisorReference(), new SnapshotReplicaRequest(partitionId), 1000*timeoutMultiplier);
-
-
                         Partition snapshotTemp = ((SnapshotReplica) Await.result(reply, Duration.Inf())).getReplica();
                         log.info("Just obtained the snapshot of Partition " + partitionId + "from replica " + replicaMember.address());
                         if (snapshot == null || snapshot.getState() < snapshotTemp.getState()) {
@@ -210,6 +211,7 @@ public class MasterActor extends AbstractActor {
                         newPartitionMembers.add(member.getMember());
                 }
 
+                //allocate new Partitions
                 for (Member newPartitionMember : newPartitionMembers) {
                     try {
                     Future<Object> reply = Patterns.ask(membersHashMap.get(newPartitionMember).getSupervisorReference(),new AllocateLocalPartition(snapshot), 1000 * timeoutMultiplier);
@@ -225,6 +227,7 @@ public class MasterActor extends AbstractActor {
                         return;
                     }
                 }
+                //new leader election
                 try {
                     Member newLeader = partitionRoutingMembers.get(partitionId).getReplicas().get(0);
                     List<Address> otherReplicas = partitionRoutingMembers.get(partitionId).getReplicas().stream().map(Member::address).collect(Collectors.toList());

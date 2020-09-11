@@ -131,7 +131,8 @@ public class PartitionActor extends AbstractActor {
                 System.out.println("I am the leader, i accepted a Put and my state is now: " + partition.getState());
                 boolean allSuccess= true;
                 for (ActorRef otherReplica : otherReplicas) {
-                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 1000* timeoutMultiplier);
+                    //todo troppo piccolo?
+                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 500 * timeoutMultiplier);
                     try {
                         Await.result(reply, Duration.Inf());
                     } catch (TimeoutException e) {
