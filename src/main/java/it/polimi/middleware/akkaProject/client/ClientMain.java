@@ -21,7 +21,7 @@ public class ClientMain {
         String masterIp = "127.0.0.1"; //cambiare con ip del Master
         final Config config = ConfigFactory //
                 .parseFile(new File("conf/client.conf")) //
-        .withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
+                .withValue("akka.remote.classic.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(Inet4Address.getLocalHost().getHostAddress()));
         // da cambiare con ip che altri utilizzano per contattare questo
 
         final ActorSystem sys = ActorSystem.create("Client", config);

@@ -4,11 +4,9 @@ import akka.actor.*;
 import akka.cluster.Cluster;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-
 import akka.japi.pf.DeciderBuilder;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.duration.Duration;
-
 
 import java.util.Optional;
 
@@ -38,7 +36,7 @@ public class SupervisorActor extends AbstractActor {
                 .build();
     }
 
-    private void onTerminated(Terminated message){
+    private void onTerminated(Terminated message) {
         ActorRef partition = getSender();
         for (int i = 0; i < localPartitions.length; i++) {
             if (localPartitions[i].equals(partition)) {
@@ -48,7 +46,7 @@ public class SupervisorActor extends AbstractActor {
         }
     }
 
-    public void deletePartition(DeletePartition message){
+    public void deletePartition(DeletePartition message) {
         int partitionId = message.getPartitionId();
         if (localPartitions[partitionId] != null)
             localPartitions[partitionId].tell(akka.actor.PoisonPill.getInstance(), self());
@@ -56,13 +54,13 @@ public class SupervisorActor extends AbstractActor {
     }
 
 
-    private void snapshotReplicaRequest(SnapshotReplicaRequest message){
+    private void snapshotReplicaRequest(SnapshotReplicaRequest message) {
         ActorRef current = localPartitions[message.getPartitionId()];
         if (current != null)
             current.forward(message, getContext());
     }
 
-    private void becomeLeader(BecomeLeader message){
+    private void becomeLeader(BecomeLeader message) {
         if (localPartitions[message.getPartitionId()] != null)
             localPartitions[message.getPartitionId()].forward(message, getContext());
     }
@@ -78,27 +76,27 @@ public class SupervisorActor extends AbstractActor {
     }
 
 
-    private void allocateLocalPartition(AllocateLocalPartition message){
+    private void allocateLocalPartition(AllocateLocalPartition message) {
         int partitionId = message.getPartition().getPartitionId();
         if (localPartitions[partitionId] == null) {
-            localPartitions[partitionId] = getContext().actorOf(PartitionActor.props(), "partition"+partitionId);
+            localPartitions[partitionId] = getContext().actorOf(PartitionActor.props(), "partition" + partitionId);
             getContext().watch(localPartitions[partitionId]);
         }
         localPartitions[partitionId].forward(message, getContext());
 
-        sender().tell(new AllocationCompleted(),self());
+        sender().tell(new AllocationCompleted(), self());
     }
 
 
     //non fa niente
     @Override
     public void preStart() {
-        System.out.println("I started "  + getContext().getSelf().path());
+        System.out.println("I started " + getContext().getSelf().path());
     }
 
     //non fa niente
     @Override
-    public void postStop(){
+    public void postStop() {
         cluster.leave(cluster.selfMember().address());
         System.out.println("Sono morto: " + getContext().getSelf().path());
 
@@ -113,7 +111,7 @@ public class SupervisorActor extends AbstractActor {
                 "Restarting due to [{}] when processing [{}]",
                 reason.getMessage(),
                 message.orElse(""));
-        super.preRestart(reason,message);
+        super.preRestart(reason, message);
     }
 
     //chiama preStart

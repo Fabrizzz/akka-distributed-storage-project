@@ -1,14 +1,14 @@
 package it.polimi.middleware.akkaProject.dataStructures;
 
-import akka.actor.ActorSelection;
-import akka.actor.Address;
 import akka.cluster.Member;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** This class stores the addresses of all the Replicas of a Partition*/
+/**
+ * This class stores the addresses of all the Replicas of a Partition
+ */
 public class PartitionRoutingMembers implements Serializable {
     private final int partitionId;
     private List<Member> replicas = new ArrayList<>(); //leader included

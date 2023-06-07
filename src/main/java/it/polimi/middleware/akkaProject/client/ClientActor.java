@@ -3,17 +3,15 @@ package it.polimi.middleware.akkaProject.client;
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
 import akka.actor.Address;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-
-import akka.actor.Props;
 import akka.pattern.Patterns;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-
 
 import java.io.Serializable;
 import java.time.ZonedDateTime;
@@ -27,11 +25,10 @@ import java.util.concurrent.TimeUnit;
 public class ClientActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
     private final String masterAddress;
-    private ActorRef master;
-
-    private HashMap<Serializable, ZonedDateTime> map = new HashMap<>();
-    private ArrayList<ActorRef> routerManagers = new ArrayList<>();
     Random random = new Random();
+    private ActorRef master;
+    private final HashMap<Serializable, ZonedDateTime> map = new HashMap<>();
+    private final ArrayList<ActorRef> routerManagers = new ArrayList<>();
 
     public ClientActor(String masterAddress) {
         this.masterAddress = masterAddress;
@@ -60,7 +57,7 @@ public class ClientActor extends AbstractActor {
                 try {
                     routerManagers.add(Await.result(secondReply, Duration.Inf()));
                 } catch (Exception e) {
-                    System.out.println("Couldn't get a Router ref: "+ address);
+                    System.out.println("Couldn't get a Router ref: " + address);
                 }
             }
         } catch (Exception e) {
@@ -117,7 +114,7 @@ public class ClientActor extends AbstractActor {
     //non fa niente
     @Override
     public void preStart() {
-        System.out.println("I started "  + getContext().getSelf().path());
+        System.out.println("I started " + getContext().getSelf().path());
         Future<ActorRef> reply = getContext().actorSelection("akka.tcp://ClusterSystem@" + masterAddress + ":1234" + "/user/master").resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
         try {
             master = Await.result(reply, Duration.Inf());
@@ -129,7 +126,7 @@ public class ClientActor extends AbstractActor {
 
     //non fa niente
     @Override
-    public void postStop(){
+    public void postStop() {
         System.out.println("I just died: " + getContext().getSelf().path());
 
     }
@@ -143,7 +140,7 @@ public class ClientActor extends AbstractActor {
                 "Restarting due to [{}] when processing [{}]",
                 reason.getMessage(),
                 message.orElse(""));
-        super.preRestart(reason,message);
+        super.preRestart(reason, message);
     }
 
     //chiama preStart

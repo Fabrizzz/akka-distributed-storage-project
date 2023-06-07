@@ -1,18 +1,19 @@
 package it.polimi.middleware.akkaProject.server;
 
-import akka.actor.*;
+import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
+import akka.actor.Address;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-
 import akka.pattern.Patterns;
 import akka.util.Timeout;
-import it.polimi.middleware.akkaProject.dataStructures.Partition;
 import it.polimi.middleware.akkaProject.dataStructures.DataWithTimestamp;
+import it.polimi.middleware.akkaProject.dataStructures.Partition;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,12 +24,10 @@ import java.util.concurrent.TimeoutException;
 
 public class PartitionActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
-
+    int timeoutMultiplier = 1;
     private Partition partition;
     private boolean iAmLeader = false;
     private List<ActorRef> otherReplicas; //useful only if i am the leader
-    int timeoutMultiplier = 1;
-
 
     public static Props props() {
         return Props.create(PartitionActor.class);
@@ -48,14 +47,14 @@ public class PartitionActor extends AbstractActor {
                 .build();
     }
 
-    private void snapshotReplicaRequest(){
+    private void snapshotReplicaRequest() {
         iAmLeader = false;
         otherReplicas = null;
         sender().tell(new SnapshotReplica(partition.getPartitionCopy()), self());
     }
 
     //Get request by a Router
-    private void getData(GetData message){
+    private void getData(GetData message) {
         log.info("Just received a get Request");
         boolean sentReply = false;
         if (partition.getMap().containsKey(message.getKey())) {
@@ -73,20 +72,19 @@ public class PartitionActor extends AbstractActor {
     }
 
     //PutUpdate received from the leader
-    private void getPutUpdate(GetPutUpdate message){
-        if (partition.getState() +1 == message.getState()){
+    private void getPutUpdate(GetPutUpdate message) {
+        if (partition.getState() + 1 == message.getState()) {
             partition.getMap().put(message.getMessage().getKey(), message.getMessage().getData());
             partition.incrementState();
             sender().tell(new PutUpdateReceived(), self());
             log.info("Just accepted a put Update");
-        }
-        else
+        } else
             log.warning("Couldn't elaborate put Update because wrong partition state");
 
     }
 
     //snapshot received by the leader (cause i wasn't able to answer to the update in time)
-    private void snapshotReplica(SnapshotReplica message){
+    private void snapshotReplica(SnapshotReplica message) {
         log.info("Just received a snapshot replica cause i didnt answer to putUpdate in time");
         if (partition.getState() < message.getReplica().getState())
             partition = message.getReplica();
@@ -94,7 +92,7 @@ public class PartitionActor extends AbstractActor {
     }
 
     //become leader request from the master, retrieving all the replica's actorRef
-    private void becomeLeader(BecomeLeader message){
+    private void becomeLeader(BecomeLeader message) {
         log.info("Master just made me the leader of Partition");
         iAmLeader = true;
         otherReplicas = new ArrayList<>();
@@ -115,24 +113,22 @@ public class PartitionActor extends AbstractActor {
 
     //Put Request received by a router
     private void putData(PutNewData message) throws InterruptedException {
-        if (!iAmLeader){
+        if (!iAmLeader) {
             log.info("Just refused a Put Request cause i am not the leader");
             sender().tell(new NotALeader(), self());
-        }
-        else{
+        } else {
             if (partition.getMap().containsKey(message.getKey()) && partition.getMap().get(message.getKey()).getGeneratedAt().compareTo(message.getData().getGeneratedAt()) >= 0) {
                 sender().tell(new DataIsTooOld(), self());
                 log.info("Just refused a Put Request cause it is too old");
-            }
-            else {
+            } else {
                 log.info("Just Accepted a Put Request");
                 partition.getMap().put(message.getKey(), message.getData());
                 partition.incrementState();
                 System.out.println("I am the leader, i accepted a Put and my state is now: " + partition.getState());
-                boolean allSuccess= true;
+                boolean allSuccess = true;
                 for (ActorRef otherReplica : otherReplicas) {
                     //todo troppo piccolo?
-                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 500 * timeoutMultiplier);
+                    Future<Object> reply = Patterns.ask(otherReplica, new GetPutUpdate(message, partition.getState()), 500L * timeoutMultiplier);
                     try {
                         Await.result(reply, Duration.Inf());
                     } catch (TimeoutException e) {
@@ -151,7 +147,7 @@ public class PartitionActor extends AbstractActor {
     }
 
     //allocate partition received by the master (either cause it's a new partition, or the leader just changed)
-    private void allocateLocalPartition(AllocateLocalPartition message){
+    private void allocateLocalPartition(AllocateLocalPartition message) {
         log.info("Just received a new Partition from the master");
         partition = message.getPartition();
         iAmLeader = false;
@@ -161,12 +157,12 @@ public class PartitionActor extends AbstractActor {
     //non fa niente
     @Override
     public void preStart() {
-        System.out.println("I started "  + getContext().getSelf().path());
+        System.out.println("I started " + getContext().getSelf().path());
     }
 
     //non fa niente
     @Override
-    public void postStop(){
+    public void postStop() {
         System.out.println("I just died: " + getContext().getSelf().path());
 
     }
@@ -180,7 +176,7 @@ public class PartitionActor extends AbstractActor {
                 "Restarting due to [{}] when processing [{}]",
                 reason.getMessage(),
                 message.orElse(""));
-        super.preRestart(reason,message);
+        super.preRestart(reason, message);
     }
 
     //chiama preStart

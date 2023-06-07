@@ -2,24 +2,19 @@ package it.polimi.middleware.akkaProject.server;
 
 import akka.actor.AbstractActor;
 import akka.actor.ActorRef;
-import akka.cluster.Cluster;
+import akka.actor.Props;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-
-import akka.actor.Props;
 import akka.pattern.Patterns;
-import it.polimi.middleware.akkaProject.dataStructures.Partition;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingActorRefs;
 import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeoutException;
 
 
 public class RouterActor extends AbstractActor {
@@ -41,18 +36,18 @@ public class RouterActor extends AbstractActor {
                 .build();
     }
 
-    public void update(RoutingActorRefUpdate message){
+    public void update(RoutingActorRefUpdate message) {
         partitionRoutingActorRefs.remove(message.getPartitionId());
-        partitionRoutingActorRefs.add(message.getPartitionId(),message.getList());
+        partitionRoutingActorRefs.add(message.getPartitionId(), message.getList());
         log.info("Routing Infos updated about partition: " + message.getPartitionId());
     }
 
-    public void initialConfiguration(RoutingActorRefInitialConfiguration message){
+    public void initialConfiguration(RoutingActorRefInitialConfiguration message) {
         partitionRoutingActorRefs = message.getList();
     }
 
 
-    public void getData(GetData message){
+    public void getData(GetData message) {
         int partitionId = message.getKey().hashCode() % partitionRoutingActorRefs.size();
         Collections.shuffle(partitionRoutingActorRefs.get(partitionId).getReplicas());
         for (ActorRef replica : partitionRoutingActorRefs.get(partitionId).getReplicas()) {
@@ -86,17 +81,15 @@ public class RouterActor extends AbstractActor {
     }
 
 
-
-
     //non fa niente
     @Override
     public void preStart() {
-        System.out.println("I started "  + getContext().getSelf().path());
+        System.out.println("I started " + getContext().getSelf().path());
     }
 
     //non fa niente
     @Override
-    public void postStop(){
+    public void postStop() {
         System.out.println("I just died: " + getContext().getSelf().path());
 
     }
@@ -110,7 +103,7 @@ public class RouterActor extends AbstractActor {
                 "Restarting due to [{}] when processing [{}]",
                 reason.getMessage(),
                 message.orElse(""));
-        super.preRestart(reason,message);
+        super.preRestart(reason, message);
     }
 
     //chiama preStart

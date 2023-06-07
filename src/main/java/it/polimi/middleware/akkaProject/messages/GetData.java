@@ -3,7 +3,7 @@ package it.polimi.middleware.akkaProject.messages;
 import java.io.Serializable;
 import java.time.ZonedDateTime;
 
-public class GetData implements Serializable{
+public class GetData implements Serializable {
     private final Serializable key;
     private final ZonedDateTime generatedAtLeastAt;
 

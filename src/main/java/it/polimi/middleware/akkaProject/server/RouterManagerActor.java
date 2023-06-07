@@ -1,11 +1,9 @@
 package it.polimi.middleware.akkaProject.server;
 
 import akka.actor.*;
-import akka.cluster.Cluster;
 import akka.cluster.Member;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
-
 import akka.japi.pf.DeciderBuilder;
 import akka.util.Timeout;
 import it.polimi.middleware.akkaProject.dataStructures.PartitionRoutingActorRefs;
@@ -14,7 +12,6 @@ import it.polimi.middleware.akkaProject.messages.*;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
-
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,8 +23,8 @@ public class RouterManagerActor extends AbstractActor {
     private final LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
 
     private final int numberOfRouters;
-    private List<ActorRef> routers;
     public int currentRouter = 0;
+    private final List<ActorRef> routers;
 
     public RouterManagerActor(int numberOfRouters) {
         this.numberOfRouters = numberOfRouters;
@@ -60,21 +57,20 @@ public class RouterManagerActor extends AbstractActor {
     }
 
 
-
-    public void getData(GetData message){
-        routers.get(currentRouter++ % routers.size()).forward(message,getContext());
+    public void getData(GetData message) {
+        routers.get(currentRouter++ % routers.size()).forward(message, getContext());
     }
 
-    public void putNewData(PutNewData message){
-        routers.get(currentRouter++ % routers.size()).forward(message,getContext());
+    public void putNewData(PutNewData message) {
+        routers.get(currentRouter++ % routers.size()).forward(message, getContext());
     }
 
-    public void update(RoutingConfigurationUpdate message){
+    public void update(RoutingConfigurationUpdate message) {
         int partitionId = message.getPartitionId();
         PartitionRoutingActorRefs currentPartitionRoutingActorRefs = new PartitionRoutingActorRefs(partitionId);
-        Future<ActorRef> reply = getContext().actorSelection(message.getPartitionRoutingMembers().getLeader().address() + "/user/supervisor/partition"+ partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+        Future<ActorRef> reply = getContext().actorSelection(message.getPartitionRoutingMembers().getLeader().address() + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
         try {
-            currentPartitionRoutingActorRefs.setLeader( Await.result(reply, Duration.Inf()));
+            currentPartitionRoutingActorRefs.setLeader(Await.result(reply, Duration.Inf()));
             currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
         } catch (Exception e) {
             log.warning("Couldn't contact the leader of replica: " + message.getPartitionId(), e);
@@ -95,32 +91,32 @@ public class RouterManagerActor extends AbstractActor {
         }
     }
 
-    public void initialConfiguration(RoutingConfigurationMessage message){
-            ArrayList<PartitionRoutingActorRefs> newPartitionRoutingActorRefs = new ArrayList<>();
-            for (PartitionRoutingMembers currentPartitionRoutingMembers : message.getPartitionRoutingInfos()) {
-                int partitionId = currentPartitionRoutingMembers.getPartitionId();
-                PartitionRoutingActorRefs currentPartitionRoutingActorRefs = new PartitionRoutingActorRefs(partitionId);
-                Future<ActorRef> reply = getContext().actorSelection(currentPartitionRoutingMembers.getLeader().address() + "/user/supervisor/partition"+ partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
-                try {
-                    currentPartitionRoutingActorRefs.setLeader( Await.result(reply, Duration.Inf()));
-                    currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
-                } catch (Exception e) {
-                    log.error("Couldn't contact the leader of replica: " + currentPartitionRoutingMembers.getPartitionId());
-                }
-                for (Member currentPartitionRoutingMember : currentPartitionRoutingMembers.getReplicas()) {
-                    if (!currentPartitionRoutingMember.equals(currentPartitionRoutingMembers.getLeader())) {
-                        reply = getContext().actorSelection(currentPartitionRoutingMember.address() + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
-                        try {
-                            currentPartitionRoutingActorRefs.getReplicas().add(Await.result(reply, Duration.Inf()));
-                        } catch (Exception e) {
-                            log.error("Couldn't contact a replica");
-                        }
+    public void initialConfiguration(RoutingConfigurationMessage message) {
+        ArrayList<PartitionRoutingActorRefs> newPartitionRoutingActorRefs = new ArrayList<>();
+        for (PartitionRoutingMembers currentPartitionRoutingMembers : message.getPartitionRoutingInfos()) {
+            int partitionId = currentPartitionRoutingMembers.getPartitionId();
+            PartitionRoutingActorRefs currentPartitionRoutingActorRefs = new PartitionRoutingActorRefs(partitionId);
+            Future<ActorRef> reply = getContext().actorSelection(currentPartitionRoutingMembers.getLeader().address() + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+            try {
+                currentPartitionRoutingActorRefs.setLeader(Await.result(reply, Duration.Inf()));
+                currentPartitionRoutingActorRefs.getReplicas().add(currentPartitionRoutingActorRefs.getLeader());
+            } catch (Exception e) {
+                log.error("Couldn't contact the leader of replica: " + currentPartitionRoutingMembers.getPartitionId());
+            }
+            for (Member currentPartitionRoutingMember : currentPartitionRoutingMembers.getReplicas()) {
+                if (!currentPartitionRoutingMember.equals(currentPartitionRoutingMembers.getLeader())) {
+                    reply = getContext().actorSelection(currentPartitionRoutingMember.address() + "/user/supervisor/partition" + partitionId).resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
+                    try {
+                        currentPartitionRoutingActorRefs.getReplicas().add(Await.result(reply, Duration.Inf()));
+                    } catch (Exception e) {
+                        log.error("Couldn't contact a replica");
                     }
                 }
-                newPartitionRoutingActorRefs.add(currentPartitionRoutingActorRefs);
             }
+            newPartitionRoutingActorRefs.add(currentPartitionRoutingActorRefs);
+        }
 
-            log.info("Finished obtaining all the Replicas ActorRef");
+        log.info("Finished obtaining all the Replicas ActorRef");
 
 
         for (ActorRef router : routers) {
@@ -131,7 +127,7 @@ public class RouterManagerActor extends AbstractActor {
     //non fa niente
     @Override
     public void preStart() {
-        System.out.println("I started "  + getContext().getSelf().path());
+        System.out.println("I started " + getContext().getSelf().path());
         for (int i = 0; i < numberOfRouters; i++) {
             routers.add(getContext().actorOf(RouterActor.props()));
         }
@@ -140,7 +136,7 @@ public class RouterManagerActor extends AbstractActor {
 
     //non fa niente
     @Override
-    public void postStop(){
+    public void postStop() {
         System.out.println("I just died: " + getContext().getSelf().path());
 
 
@@ -155,7 +151,7 @@ public class RouterManagerActor extends AbstractActor {
                 "Restarting due to [{}] when processing [{}]",
                 reason.getMessage(),
                 message.orElse(""));
-        super.preRestart(reason,message);
+        super.preRestart(reason, message);
     }
 
     //chiama preStart

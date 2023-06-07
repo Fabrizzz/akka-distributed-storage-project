@@ -1,14 +1,14 @@
 package it.polimi.middleware.akkaProject.dataStructures;
 
 import akka.actor.ActorRef;
-import akka.actor.ActorSelection;
-import akka.actor.Address;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-/** This class stores the actorRef of all the Replicas of a Partition*/
+/**
+ * This class stores the actorRef of all the Replicas of a Partition
+ */
 
 public class PartitionRoutingActorRefs implements Serializable {
     private final int partitionId;
