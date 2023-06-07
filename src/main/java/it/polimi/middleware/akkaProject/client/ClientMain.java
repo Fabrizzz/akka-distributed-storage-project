@@ -8,7 +8,7 @@ import com.typesafe.config.ConfigValueFactory;
 import it.polimi.middleware.akkaProject.dataStructures.DataWithTimestamp;
 import it.polimi.middleware.akkaProject.messages.ForwardGetData;
 import it.polimi.middleware.akkaProject.messages.PutNewData;
-import it.polimi.middleware.akkaProject.messages.UpdateMemberListRequest;
+import it.polimi.middleware.akkaProject.messages.UpdatedMemberListRequest;
 
 import java.io.File;
 import java.net.Inet4Address;
@@ -35,7 +35,7 @@ public class ClientMain {
             instruction = scanner.nextLine();
             switch (instruction) {
                 case "updateRouters":
-                    client.tell(new UpdateMemberListRequest(), ActorRef.noSender());
+                    client.tell(new UpdatedMemberListRequest(), ActorRef.noSender());
                     break;
                 case "put":
                     System.out.println("Insert key:");

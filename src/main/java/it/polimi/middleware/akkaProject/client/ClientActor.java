@@ -41,17 +41,17 @@ public class ClientActor extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(UpdateMemberListRequest.class, this::updateRouters)
+                .match(UpdatedMemberListRequest.class, this::updateRouters)
                 .match(PutNewData.class, this::putNewData)
                 .match(ForwardGetData.class, this::getData)
                 .matchAny(o -> log.error("received unknown message"))
                 .build();
     }
 
-    private void updateRouters(UpdateMemberListRequest message) {
+    private void updateRouters(UpdatedMemberListRequest message) {
         Future<Object> reply = Patterns.ask(master, message, 1000);
         try {
-            ArrayList<Address> addresses = ((UpdateMemberListAnswer) Await.result(reply, Duration.Inf())).getList();
+            ArrayList<Address> addresses = ((UpdatedMemberListAnswer) Await.result(reply, Duration.Inf())).getList();
             for (Address address : addresses) {
                 Future<ActorRef> secondReply = getContext().actorSelection(address + "/user/routerManager").resolveOne(new Timeout(scala.concurrent.duration.Duration.create(1, TimeUnit.SECONDS)));
                 try {
